@@ -1,4 +1,4 @@
-from base import load_data, load_names, leave_one_out_training, leave_one_out_testing
+from base import load_data, load_names, leave_one_out_training, test_all_scans
 
 
 # ------------------------------------------------------------------------------------
@@ -47,7 +47,7 @@ options['testing'] = True
 
 # main script for leave-one-out training 
 if __name__ == '__main__':
-    if options['train'] is True:
+    if options['training'] is True:
         # load feature data and perform leave-one-out training 
         x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names = load_data(options)
         leave_one_out_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)

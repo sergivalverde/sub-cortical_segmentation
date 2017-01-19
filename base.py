@@ -5,7 +5,7 @@ import cPickle
 from nibabel import load as load_nii
 from scipy import ndimage
 import scipy.io as io
-from data_creation import load_patches, load_only_names, load_patch_batch, leave_one_out, get_atlas_vectors
+from data_creation import load_patches, load_only_names, load_patch_batch
 from nolearn.lasagne import NeuralNet, BatchIterator, TrainSplit
 from nolearn_utils.hooks import SaveTrainingHistory, PlotTrainingHistory, EarlyStopping
 from lasagne import objectives, updates
