@@ -1,0 +1,7 @@
+* Sub-cortical brain tissue segmentation of MRI images using CNN networks
+
+Some experiments using convolutional neural networks (CNN) for subcortical tissue segmentation. 
+This is a /work in progress/. 
+
+
+
