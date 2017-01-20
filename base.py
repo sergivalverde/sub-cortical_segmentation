@@ -117,7 +117,7 @@ def leave_one_out_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers
         # fit the classifier. save weights when finished
         net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
        
-        net_weights = os.path.join(exp_folder, 'nets', options['net_model'][level])
+        net_weights = os.path.join(exp_folder, 'nets', options['net_model'])
         net.load_params_from(net_weights)
 
         # if selected, test the network. Running in batch to reduce the amount of RAM.
@@ -144,11 +144,13 @@ def test_all_scans(subject_names, options):
     - subject_names: a list containing the names of each of the subjects of the database.
     - options file for testing 
     """
-    for i in range(len(subject_names)):
+    for i in range(len(subject_names[0])):
 
         # organize experiments
-        current_scan = os.path.split(os.path.split(subject_names[0])[0])[-1]
-        print "--- training on subject :", current_scan, '---------'           
+
+        current_scan = os.path.split(os.path.split(subject_names[0,i])[0])[-1]
+        print "--- testing on subject :", current_scan, '---------'
+        
         experiment = options['experiment']
         if options['organize_experiments']:
             exp_folder = os.path.join(options['folder'], current_scan, experiment)
@@ -167,7 +169,7 @@ def test_all_scans(subject_names, options):
         # build the network model for the particular image 
         # load previous weights for testing
                    
-        print current_scan + 'Build the model'
+        print current_scan + ' Build the model'
         net = build_model(os.path.join(options['folder'], current_scan), options)
         net_weights = os.path.join(exp_folder, 'nets', options['weights_name'])
         net.load_params_from(net_weights)
@@ -176,7 +178,7 @@ def test_all_scans(subject_names, options):
         image_nii = load_nii(subject_names[0, i])
         image = np.zeros_like(image_nii.get_data())
             
-        for batch_axial, batch_cor, batch_sag, centers, atlas in load_patch_batch(subject_names[:, i], options['batch_size'], tuple(options['patch_size'])):
+        for batch_axial, batch_cor, batch_sag, centers in load_patch_batch(subject_names[:, i], options['test_batch_size'], tuple(options['patch_size'])):
             y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
             [x, y, z] = np.stack(centers, axis=1)
             image[x, y, z] = np.expand_dims(y_pred, axis = 1)

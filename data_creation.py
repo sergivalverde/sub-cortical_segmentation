@@ -30,7 +30,8 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, dataty
     - y_saggital, a list containing all the labels for all image patches (saggital view) [image_num, num_samples, p1 , p2]
     - vox_positions: voxel coordinates for each of the patches [image_num, x, y, z]
     - image names 
-    """    
+    """
+    
     # Get the names of the images and load them and normalize images
     subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
     image_names = [os.path.join(dir_name, subject, name) for subject in subjects]
@@ -59,7 +60,6 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, dataty
     cor_y_neg_patches = [np.array(get_patches(image, centers, size, mode = 'coronal')) for image, centers in zip(labels, n_vox_coord_pos)]
     sag_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(images_norm, n_vox_coord_pos)]
     sag_y_neg_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(labels, n_vox_coord_pos)]
-    
     
     x_axial = [np.concatenate([p1, p2]) for p1, p2 in zip(axial_x_pos_patches, axial_x_neg_patches)]
     y_axial = [np.concatenate([p1, p2]) for p1, p2 in zip(axial_y_pos_patches, axial_y_neg_patches)]
@@ -146,9 +146,7 @@ def load_only_names(dir_name,mask_name,t1_name, use_t1, size):
     if use_t1:
         t1_names = [os.path.join(dir_name, patient, t1_name) for patient in patients]
         
-    image_names = np.stack([name for name in [
-        t1_names
-    ] if name is not None])
+    image_names = np.stack([name for name in [t1_names] if name is not None])
 
     return image_names
 
@@ -167,6 +165,7 @@ def get_patches(image, centers, patch_size=(32, 32), mode = 'axial'):
     Output:
     - A list of patches for each voxel passed as input in "centers" --> [num_voxels, p1, p2]
     """
+
     # If the size has even numbers, the patch will be centered. If not, it will try to create an square almost centered.
     # By doing this we allow pooling when using encoders/unets.
     patches = []
@@ -203,6 +202,9 @@ def get_mask_voxels(mask, size=None):
     Output:
     - indices_list: a list of non-zero voxel positions expressed as a tuple [(x,y,z)]
     """
+
+
+    
     import random
     indices = np.stack(np.nonzero(mask), axis=1)
     indices_list = [tuple(idx) for idx in indices]
@@ -232,18 +234,20 @@ def load_patch_batch(image_names, batch_size, patch_size, datatype=np.float32):
        - voxel coordinate
     """
 
+
     images = [np.squeeze(load_nii(name).get_data()) for name in image_names]
     images_norm = [(im - im[np.nonzero(im)].mean()) / im[np.nonzero(im)].std() for im in images]
+
     lesion_centers = get_mask_voxels(images[0].astype(np.bool))
+
     
     for i in range(0, len(lesion_centers), batch_size):
         centers = lesion_centers[i:i+batch_size]
-        
-        yield
-        np.stack([np.array(get_patches(image, centers, patch_size, mode= 'axial')).astype(datatype) for image in images_norm], axis=1),
-        np.stack([np.array(get_patches(image, centers, patch_size, mode= 'coronal')).astype(datatype) for image in images_norm], axis=1),
-        np.stack([np.array(get_patches(image, centers, patch_size, mode= 'saggital')).astype(datatype) for image in images_norm], axis=1),
-        centers
+        axial_patches = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'axial')).astype(datatype) for image in images_norm], axis=1)
+        coronal_patches = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'coronal')).astype(datatype) for image in images_norm], axis=1)
+        saggital_patches  = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'saggital')).astype(datatype) for image in images_norm], axis=1)
+
+        yield axial_patches, coronal_patches, saggital_patches, centers
 
         
 
