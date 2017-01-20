@@ -51,9 +51,9 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, dataty
     cor_y_pos_patches = [np.array(get_patches(image, centers, size, mode = 'coronal')) for image, centers in zip(labels, p_vox_coord_pos)]
     sag_x_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(images_norm,  p_vox_coord_pos)]
     sag_y_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(labels, p_vox_coord_pos)]
-
+    
     # negatives class (background) class 15. sampling the same number of negatives of the rest of classes
-    n_vox_coord_pos = [get_mask_voxels(mask==15,  size=x_pos_classes.shape[0]) for mask, x_pos_classes in zip(labels, axial_x_pos_patches)]
+    n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]    
     axial_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(images_norm, n_vox_coord_pos)]
     axial_y_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(labels, n_vox_coord_pos)]
     cor_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'coronal')) for image, centers in zip(images_norm, n_vox_coord_pos)]
@@ -202,8 +202,6 @@ def get_mask_voxels(mask, size=None):
     Output:
     - indices_list: a list of non-zero voxel positions expressed as a tuple [(x,y,z)]
     """
-
-
     
     import random
     indices = np.stack(np.nonzero(mask), axis=1)
@@ -212,7 +210,8 @@ def get_mask_voxels(mask, size=None):
     # if a output size is defined, shuffle and resize the list
     if size is not None:
         random.shuffle(indices_list)
-        indices_list[:size]
+        indices_list = indices_list[:size]
+
     return indices_list
 
 
