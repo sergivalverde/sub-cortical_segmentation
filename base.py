@@ -58,7 +58,12 @@ def leave_one_out_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers
     '''
     Perform leave-one-out classification of the entire database of images. This function is called once and 
     we iterate through the images. For each image, a training feature vector X and Y is computed removing the current
-    image. 
+    image. So far, a quick cascade implementation:
+
+    [train data] --> [train_cnn1] --> [test on training data] --> [extract FP as new training data] --> [CNN2]
+
+    Once the CNN1 is trained, all images used for training have to be recalled again and tested, as the model does not train using the whole
+    training set, but all positive (sub-cortical classes) and the same number of negatives (background)
 
     Inputs: 
       - x_axial: a list of X data (axial slice) indexed for each of the database subjects. Each element contains array of [features, p1, p2]
@@ -67,13 +72,14 @@ def leave_one_out_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers
       - y_saggital: a list of labels (saggital slice) indexed for each of the database subjects. Each element contains array of [features, p1, p2]
       - centers: a list of voxel coordinates for each of the extracted patches for each of the database subjects. 
       - image names 
-      - options for different options in leave-one-out training 
+      - options for different options in leave-one-out training. Now incorporating also the options['levels'], which controls how many cascade
+        levels are performed 
     '''
     
     for i in range(len(subject_names)):
 
         # organize experiments
-        current_scan = os.path.split(os.path.split(subject_names[0])[0])[-1]
+        current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
         print "\n--------------------------------------------------"
         print "training on subject :", current_scan
         print "--------------------------------------------------\n"
@@ -91,54 +97,99 @@ def leave_one_out_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers
             if not os.path.exists(os.path.join(exp_folder,'.train')):
                 os.mkdir(os.path.join(exp_folder,'train'))
 
-        # load training data for the current scan
-        x_train_axial, x_train_cor, x_train_sag, y_train = generate_training_set(i, x_axial, x_cor, x_sag, y_axial)
+        # iterate through levels
+        # at the end of each iterations, reload data with the worst examples
+        for level in range(options['levels']):
 
-        print "\n--------------------------------------------------"
-        print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
-        print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
-        print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')' 
-        print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
-        print "--------------------------------------------------\n"
-
-        # build the network model 
-        # if selected, load previous weights
-        print current_scan + ' Build the model'
-        net = build_model(os.path.join(options['folder'], current_scan), options)
-
-        if options['load_weights'] == True:
-            try:
-                net_weights = os.path.join(exp_folder, 'nets', options['weights_name'])
-                net.load_params_from(net_weights)
-            except:
-                print  current_scan, 'No network weights available. Training from scratch.'
-                    
-
-        # fit the classifier. save weights when finished
-        net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
-       
-        net_weights = os.path.join(exp_folder, 'nets', options['net_model'])
-        net.load_params_from(net_weights)
-
-        # if selected, test the network. Running in batch to reduce the amount of RAM.
-        if options['testing']:
-            print current_scan , 'Testing subject ----------------------------'
-
-            image_nii = load_nii(subject_names[0, i])
-            image = np.zeros_like(image_nii.get_data())
+            print '--------------------------------------------------'
+            print 'LEVEL ', level +1
+            print '--------------------------------------------------\n'
             
-            for batch_axial, batch_cor, batch_sag, centers, atlas in load_patch_batch(subject_names[:, i], options['test_batch_size'], tuple(options['patch_size'])):
-                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
-                [x, y, z] = np.stack(centers, axis=1)
-                image[x, y, z] = np.expand_dims(y_pred, axis = 1)
-            image_nii.get_data()[:] = image
-            image_nii.to_filename(os.path.join(exp_folder, options['out_mask'] +'_1.nii.gz'))
+            # load training data for the current scan
+            x_train_axial, x_train_cor, x_train_sag, y_train = generate_training_set(i, x_axial, x_cor, x_sag, y_axial)
 
-    
+            print "\n--------------------------------------------------"
+            print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+            print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+            print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')' 
+            print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+            print "--------------------------------------------------\n"
+
+            # build the network model 
+            # if selected, load previous weights
+            print current_scan + ' Build the model'
+            net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
+
+            if options['load_weights'] == True:
+                try:
+                    net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+                    net.load_params_from(net_weights)
+                except:
+                    print  current_scan, 'No network weights available. Training from scratch.'
+
+
+            # fit the classifier. save weights when finished
+            net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
+            #net.fit(x_train_axial, y_train)
+
+            net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+            net.load_params_from(net_weights)
+
+            # if selected, test the network. Running in batch to reduce the amount of RAM.
+            print current_scan , 'Testing subjects ----------------------------'
+            out_masks = []
+            
+            for j in range(len(subject_names)):
+
+                test_scan = os.path.split(os.path.split(subject_names[j])[0])[-1]
+                image_nii = load_nii(subject_names[j])
+                image = np.zeros_like(image_nii.get_data())
+                print current_scan, ': testing on --> ', test_scan
+                for batch_axial, batch_cor, batch_sag, centers in load_patch_batch(subject_names[j], options['test_batch_size'], tuple(options['patch_size'])):
+                    y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                    #y_pred = net.predict(batch_axial)
+                    [x, y, z] = np.stack(centers, axis=1)
+                    image[x, y, z] = np.expand_dims(y_pred, axis = 1)
+                                    
+                image_nii.get_data()[:] = image
+                image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_level_' + str(level) + '.nii.gz'))
+
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(np.squeeze(image))
+
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = np.squeeze(image) == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
+
+                    num_elements_by_lesion = ndimage.labeled_comprehension(th_label, labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
+
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+
+                # apped a binary mask of the segmentation ouput to used as seed 
+                out_masks.append(filtered_mask > 0)
+                image_nii.get_data()[:] = np.expand_dims(filtered_mask, axis = 3)
+                image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
+            # reload the training data using the worst examples as a seeds
+            x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names = load_patches(dir_name=options['folder'],
+                                                                                        t1_name=options['t1'],
+                                                                                        mask_name=options['mask'],
+                                                                                        size=tuple(options['patch_size']),
+                                                                                        seeds = out_masks)
+
+            
+            
 def test_all_scans(subject_names, options):
     """
     Perform testing on all the scans of the database. It assumes that for each subject, a trained 
-    network already exists. 
+    network already exists. Usng a cascade approach. 
 
     Input: 
     - subject_names: a list containing the names of each of the subjects of the database.
@@ -165,27 +216,49 @@ def test_all_scans(subject_names, options):
             if not os.path.exists(os.path.join(exp_folder,'.train')):
                 os.mkdir(os.path.join(exp_folder,'train'))
 
-        
-        # build the network model for the particular image 
-        # load previous weights for testing
-                   
-        print current_scan + ' Build the model'
-        net = build_model(os.path.join(options['folder'], current_scan), options)
-        net_weights = os.path.join(exp_folder, 'nets', options['weights_name'])
-        net.load_params_from(net_weights)
+        # itereate between iterations
 
-        # test 
-        image_nii = load_nii(subject_names[0, i])
-        image = np.zeros_like(image_nii.get_data())
-            
-        for batch_axial, batch_cor, batch_sag, centers in load_patch_batch(subject_names[:, i], options['test_batch_size'], tuple(options['patch_size'])):
-            y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
-            [x, y, z] = np.stack(centers, axis=1)
-            image[x, y, z] = np.expand_dims(y_pred, axis = 1)
+        positive_samples = None
+        test_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
+        image_nii = load_nii(subject_names[i])
+     
+        for level in range(options['levels']):
+            # build the network model for the particular image 
+            # load previous weights for testing
+            image = np.zeros_like(image_nii.get_data())
+            print current_scan, ': testing on --> ', test_scan, ' (level ', level , ')'
+            for batch_axial, batch_cor, batch_sag, centers in load_patch_batch(subject_names[i], options['test_batch_size'], tuple(options['patch_size']), pos_samples = positive_samples):
+                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                #y_pred = net.predict(batch_axial)
+                [x, y, z] = np.stack(centers, axis=1)
+                image[x, y, z] = np.expand_dims(y_pred, axis = 1)
+                                    
+                image_nii.get_data()[:] = image
+                image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_level_' + str(level) + '.nii.gz'))
 
-        image_nii.get_data()[:] = image
-        image_nii.to_filename(os.path.join(exp_folder, options['out_mask'] +'_1.nii.gz'))
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(np.squeeze(image))
 
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = np.squeeze(image) == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
+
+                    num_elements_by_lesion = ndimage.labeled_comprehension(th_label, labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
+
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+    
+                image_nii.get_data()[:] = np.expand_dims(filtered_mask, axis = 3)
+                image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
+                # take positive samples from the segmentation and used as seed for the next iteration 
+                positive_samples = filtered_mask > 0
 
                 
 def generate_training_set(index, x_axial, x_coronal, x_saggital, y, centers = None, randomize = True):
@@ -249,22 +322,28 @@ def generate_training_set(index, x_axial, x_coronal, x_saggital, y, centers = No
     # IBSR related: a selected background around structs is selected in label mask to separate from the rest
     # of background. background has label = 15 but should be 0.
     y_train[y_train==15] = 0
+
+    print "X_TRAIN: ", x_train_axial.shape[0]
+    print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
+    print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
+    
     return x_train_axial, x_train_cor, x_train_sag, y_train
 
 
-def build_model(subject_path, options):
+def build_model(subject_path, options, level = 0):
     """
     Build the CNN model. Create the Neural Net object and return it back. 
     Inputs: 
     - subject name: used to save the net weights accordingly.
     - options: several hyper-parameters used to configure the net.
+    - level: cascade level 
     
     Output:
     - net: a NeuralNet object 
     """
     # define paths to save weights and nets
     current_folder = subject_path
-    net_model_name = options['weights_name']
+    net_model_name = options['weights_name'][level]
     
     # organize_experiments
     if options['organize_experiments']:

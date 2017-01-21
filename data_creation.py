@@ -10,7 +10,7 @@ import copy
 from operator import add
 
 
-def load_patch_vectors(name, label_name, dir_name, size, random_state=42, datatype=np.float32):
+def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds = None, datatype=np.float32):
     """
     Generate all patch vectors for all subjects and one sequence (name). This is done for each image view (axial, coronal and axial)
     In subcortical brain tissue segmentation, I am extracting all positive class voxels (classes from 1 to 14) and the same number of
@@ -22,6 +22,7 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, dataty
     - dir_name = absolute path of the database images
     - size: patch size [p1, p2]
     - random_state: random seed 
+    - seeds: list of images with voxels classified as positive classes during the previous iteration
 
     Outputs:
     - x_axial: a list containing all the selected patches for all images for the axial view [image_num, num_samples, p1 , p2]
@@ -52,8 +53,16 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, dataty
     sag_x_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(images_norm,  p_vox_coord_pos)]
     sag_y_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(labels, p_vox_coord_pos)]
     
-    # negatives class (background) class 15. sampling the same number of negatives of the rest of classes
-    n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]    
+    # negatives class (background) class 15. sampling the same number of negatives of the rest of classes.
+    # If a list of images with voxels classified as positive classes is passed as input, use it to select the negative class 
+    if seeds is None: 
+        n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]        
+    else:
+        n_vox_coord_pos = [get_mask_voxels(np.logical_and(mask==15, seed ==1),  size=len(p)) for mask, seed, p in zip(labels, seeds, p_vox_coord_pos)]
+
+    print "DEBUG: pos patches: ", len(np.concatenate(p_vox_coord_pos, axis=0))
+    print "DEBUG: neg patches: ", len(np.concatenate(n_vox_coord_pos, axis=0))
+        
     axial_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(images_norm, n_vox_coord_pos)]
     axial_y_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(labels, n_vox_coord_pos)]
     cor_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'coronal')) for image, centers in zip(images_norm, n_vox_coord_pos)]
@@ -92,7 +101,7 @@ def get_atlas_vectors(dir_name, current_scan, centers):
 """
 
 
-def load_patches(dir_name, mask_name, t1_name, size):
+def load_patches(dir_name, mask_name, t1_name, size, seeds = None):
     """
     Load all patches for a given subject image passed as argument. This function makes no sense when using only
     one channel, but it's useful when using more than one, as load_patch_vectors is called for each of the channels and 
@@ -103,6 +112,7 @@ def load_patches(dir_name, mask_name, t1_name, size):
     - label_name: label name 
     - t1_name: T1 image name 
     - size: patch size [p1, p2]
+    - seeds: list of images used as a seed 
 
     output:
     - x_axial: a list containing all selected patches (axial view) [num_samples, p1, p2]
@@ -118,9 +128,10 @@ def load_patches(dir_name, mask_name, t1_name, size):
     random_state = np.random.randint(1)
 
 
+
     print 'Loading ' + t1_name + ' images'
-    x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names = load_patch_vectors(t1_name, mask_name, dir_name, size, random_state)
-    
+    x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names = load_patch_vectors(t1_name, mask_name, dir_name, size, random_state, seeds)
+
     #print 'Creating data vector'
     #data = [images for images in [t1] if images is not None]
     #flair, pd, t2, t1, gado = None, None, None, None, None
@@ -133,7 +144,7 @@ def load_patches(dir_name, mask_name, t1_name, size):
     #    t1_names
     #] if name is not None])
 
-    # reshape accordingly 
+    # reshape accordingly
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names 
 
 
@@ -216,14 +227,16 @@ def get_mask_voxels(mask, size=None):
 
 
 
-def load_patch_batch(image_names, batch_size, patch_size, datatype=np.float32):
+def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, datatype=np.float32):
     """
-    Load testing data in batches to reduce RAM memory. Return data in batches. 
+    Load testing data in batches to reduce RAM memory. Return data in batches. If a mask is passed as input
+    only the voxels of this mask are considered for testing. This can be useful to test the cascade. 
 
     Input:
     - image_names: image modalities absolute paths 
     - batch_size: output batch size
     - patch_size: patch size in [p1, p2] 
+    - pos_samples: a binary input mask of the input image with voxels classified as positive classes
 
     Output:
     - yields consecutive batches of testing patches:
@@ -233,18 +246,22 @@ def load_patch_batch(image_names, batch_size, patch_size, datatype=np.float32):
        - voxel coordinate
     """
 
-
-    images = [np.squeeze(load_nii(name).get_data()) for name in image_names]
-    images_norm = [(im - im[np.nonzero(im)].mean()) / im[np.nonzero(im)].std() for im in images]
-
-    lesion_centers = get_mask_voxels(images[0].astype(np.bool))
-
     
+    image = np.squeeze(load_nii(image_name).get_data())
+    image_norm = (image - image[np.nonzero(image)].mean()) / image[np.nonzero(image)].std()
+
+    # take into account if a mask with positive samples is passed.
+    # If not, extract all voxels 
+    if pos_samples == None:
+        lesion_centers = get_mask_voxels(image.astype(np.bool))
+    else:
+        lesion_centers = get_mask_voxels(pos_samples.astype(np.bool))
+        
     for i in range(0, len(lesion_centers), batch_size):
         centers = lesion_centers[i:i+batch_size]
-        axial_patches = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'axial')).astype(datatype) for image in images_norm], axis=1)
-        coronal_patches = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'coronal')).astype(datatype) for image in images_norm], axis=1)
-        saggital_patches  = np.stack([np.array(get_patches(image, centers, patch_size, mode= 'saggital')).astype(datatype) for image in images_norm], axis=1)
+        axial_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'axial')).astype(datatype)],axis=1)
+        coronal_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'coronal')).astype(datatype)], axis=1)
+        saggital_patches  = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'saggital')).astype(datatype)], axis = 1)
 
         yield axial_patches, coronal_patches, saggital_patches, centers
 

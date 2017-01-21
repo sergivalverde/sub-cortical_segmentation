@@ -6,24 +6,25 @@ from base import load_data, load_names, leave_one_out_training, test_all_scans
 # ------------------------------------------------------------------------------------
 options = {}
 # - experiment name
-experiment = 'ibsr18_2D_multi'       
+experiment = 'ibsr18_cascade_15'       
 options['experiment'] = experiment
 # - select if save models and masks in separate folders
 options['organize_experiments'] = True
 # - input data folder
 options['folder'] = '/mnt/DATA/w/CNN_CORT/images/IBSR18'
 # - CNN weights and architecture name (for saving)
-options['weights_name'] = experiment + '.pkl'
+options['weights_name'] = [experiment + '_1.pkl', experiment + '_2.pkl']
 # - t1 name
+options['use_t1'] = True
 options['t1'] = 'T1.nii.gz'
 # - label name
-options['mask'] = 'gt_15_classes.nii.gz'
+options['mask'] = 'gt_all_subcortical.nii.gz'
 # - output segmentation name 
 options['out_mask'] = 'CNN_' + experiment
 # - number of CNN channels in the feature vector
 options['num_channels'] = 1
 # - CNN patch size
-options['patch_size'] = [29,29]
+options['patch_size'] = [15,15]
 # - CNN training batch size
 options['batch_size'] = 256
 # - Number of maximum iterations permitted without reducing the validation loss
@@ -42,6 +43,8 @@ options['load_weights'] = True
 options['training'] = True
 # - Test excluded image during leave one out training 
 options['testing'] = True
+options['levels'] = 2
+
 # -------------------------------------------------------------------------------------
 
 
