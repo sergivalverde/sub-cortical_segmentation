@@ -157,9 +157,9 @@ def load_only_names(dir_name,mask_name,t1_name, use_t1, size):
     if use_t1:
         t1_names = [os.path.join(dir_name, patient, t1_name) for patient in patients]
         
-    image_names = np.stack([name for name in [t1_names] if name is not None])
+    #image_names = np.stack([name for name in [t1_names] if name is not None])
 
-    return image_names
+    return t1_names
 
 
     
@@ -252,7 +252,7 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dat
 
     # take into account if a mask with positive samples is passed.
     # If not, extract all voxels 
-    if pos_samples == None:
+    if pos_samples is None:
         lesion_centers = get_mask_voxels(image.astype(np.bool))
     else:
         lesion_centers = get_mask_voxels(pos_samples.astype(np.bool))

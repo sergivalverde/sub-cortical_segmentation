@@ -6,7 +6,7 @@ from base import load_data, load_names, leave_one_out_training, test_all_scans
 # ------------------------------------------------------------------------------------
 options = {}
 # - experiment name
-experiment = 'ibsr18_cascade_15'       
+experiment = 'ibsr18_cascade_29sum'       
 options['experiment'] = experiment
 # - select if save models and masks in separate folders
 options['organize_experiments'] = True
@@ -24,11 +24,11 @@ options['out_mask'] = 'CNN_' + experiment
 # - number of CNN channels in the feature vector
 options['num_channels'] = 1
 # - CNN patch size
-options['patch_size'] = [15,15]
+options['patch_size'] = [29,29]
 # - CNN training batch size
 options['batch_size'] = 256
 # - Number of maximum iterations permitted without reducing the validation loss
-options['patience'] = 10
+options['patience'] = 25
 # - verbosity of the training process  
 options['verbose'] = 11
 # - max epochs to train 
@@ -57,6 +57,6 @@ if __name__ == '__main__':
     else:
         # if training is disabled, test all the images of the dataset using existing weights, assuming that those exits
         subject_names = load_names(options)
-        leave_one_out_testing(subject_names, options)
+        test_all_scans(subject_names, options)
 
 
