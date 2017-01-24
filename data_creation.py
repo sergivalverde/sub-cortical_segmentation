@@ -2,12 +2,15 @@ import os, re, gc
 import numpy as np
 from scipy import ndimage as nd
 from nibabel import load as load_nii
+import nibabel as nib
 from math import floor
 from operator import itemgetter
 import h5py
 import cPickle
 import copy
 from operator import add
+nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
+
 
 
 def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds = None, datatype=np.float32):
@@ -36,12 +39,12 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
     # Get the names of the images and load them and normalize images
     subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
     image_names = [os.path.join(dir_name, subject, name) for subject in subjects]
-    images = [np.squeeze(load_nii(name).get_data()) for name in image_names] 
+    images = [load_nii(name).get_data() for name in image_names] 
     images_norm = [(im.astype(dtype=datatype) - im[np.nonzero(im)].mean()) / im[np.nonzero(im)].std() for im in images]
     
     # load labels 
     label_names = [os.path.join(dir_name, subject, label_name) for subject in subjects]
-    labels = [np.squeeze(load_nii(name).get_data()) for name in label_names]
+    labels = [load_nii(name).get_data() for name in label_names]
 
     
     # positive classes (not background) classes between 1 and 14 
@@ -82,23 +85,29 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, vox_positions, image_names
 
 
-"""
+
 def get_atlas_vectors(dir_name, current_scan, centers):
 
+    """
     Generate training data vectors from probabilistic atlases. These vectors are concatenated with fully-connected layers.
-   
+    """
 
-    patients = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
+    subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
     
-    atlas_names =  [os.path.join(dir_name, patient, 'build_atlas', 'prior_atlas_4D_train_' + current_scan + '.nii.gz') for patient in patients]
+    atlas_names =  [os.path.join(dir_name, subject, 'mni_atlas', 'MNI_sub_prob_def.nii.gz') for subject in subjects]
+    #atlas_names =  [os.path.join(dir_name, subject, 'build_atlas15', 'prior_atlas_4D_train_15_classes_' + current_scan + '.nii.gz') for subject in subjects]
     atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
 
     # convert lesion centers
     lc = map(lambda l: np.asarray(l), centers)
     atlas_vectors = [a[c[:,0], c[:,1], c[:,2]] for a, c in zip(atlas_images, lc)]
 
-    return atlas_vectors    
-"""
+    # correct for background. if no probability exists for any class, set as background
+    for index in range(len(atlas_vectors)):
+        if np.sum(atlas_vectors[index]) == 0:
+            atlas_vectors[v][14] = 1
+
+    return atlas_vectors  
 
 
 def load_patches(dir_name, mask_name, t1_name, size, seeds = None):
@@ -201,7 +210,6 @@ def get_patches(image, centers, patch_size=(32, 32), mode = 'axial'):
 
     return patches
 
-
 def get_mask_voxels(mask, size=None):
     """
     Return the voxel coordinates of non-zero voxels given a input image passed as argument.
@@ -226,8 +234,7 @@ def get_mask_voxels(mask, size=None):
     return indices_list
 
 
-
-def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, datatype=np.float32):
+def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir_name = None, current_scan = None, datatype=np.float32):
     """
     Load testing data in batches to reduce RAM memory. Return data in batches. If a mask is passed as input
     only the voxels of this mask are considered for testing. This can be useful to test the cascade. 
@@ -243,11 +250,12 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dat
        - x_axial [batch_size, num_channels, p1, p2]
        - x_coronal [batch_size, num_channels, p1, p2]
        - x_saggital [batch_size, num_channels, p1, p2]
+       - x_atas [batch_size, 15]  
        - voxel coordinate
     """
 
     
-    image = np.squeeze(load_nii(image_name).get_data())
+    image = load_nii(image_name).get_data()
     image_norm = (image - image[np.nonzero(image)].mean()) / image[np.nonzero(image)].std()
 
     # take into account if a mask with positive samples is passed.
@@ -256,14 +264,28 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dat
         lesion_centers = get_mask_voxels(image.astype(np.bool))
     else:
         lesion_centers = get_mask_voxels(pos_samples.astype(np.bool))
-        
+
+    # load atlas
+    dir_name = '/mnt/DATA/w/CNN_CORT/images/IBSR18'
+    #atlas_name = os.path.join(dir_name, current_scan, 'build_atlas15', 'prior_atlas_4D_train_15_classes_' + current_scan + '.nii.gz')
+    atlas_name = os.path.join(dir_name, current_scan, 'mni_atlas', 'MNI_sub_prob_def.nii.gz')
+    atlas_image =  load_nii(atlas_name).get_data()
+
     for i in range(0, len(lesion_centers), batch_size):
+        
         centers = lesion_centers[i:i+batch_size]
         axial_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'axial')).astype(datatype)],axis=1)
         coronal_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'coronal')).astype(datatype)], axis=1)
         saggital_patches  = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'saggital')).astype(datatype)], axis = 1)
+        cl = map(lambda l: np.asarray(l), centers)
+        atlas_vector = np.stack([atlas_image[c[0],c[1],c[2]] for c in cl]).astype(dtype=np.float32)
 
-        yield axial_patches, coronal_patches, saggital_patches, centers
+        # correct for background
+        for index in range(atlas_vector.shape[0]):
+            if np.sum(atlas_vector[index]) == 0:
+                atlas_vector[index,14] = 1
+
+        yield axial_patches, coronal_patches, saggital_patches, atlas_vector, centers
 
         
 
