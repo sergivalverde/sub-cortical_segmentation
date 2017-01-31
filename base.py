@@ -184,7 +184,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
 
                         y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
                         [x, y, z] = np.stack(centers, axis=1)
-                        image[x, y, z] = np.expand_dims(y_pred, axis = 1)
+                        image[x, y, z] = y_pred
 
                         # if the current scan is tested, also compute probabilities
                         if i==j:
@@ -208,9 +208,11 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     # iterate for each of the classes
                     filtered_mask = np.zeros_like(image)
 
+                    # load mni binary mask to guide the segmentation 
+                    atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'mni_mask_subcortical.nii.gz')).get_data()
                     for l in range(1,15):
                         print "     processing label ", l
-                        th_label = image == l
+                        th_label = np.logical_and(image == l, atlas)
                         labels, num_labels = ndimage.label(th_label)
                         label_list = np.unique(labels)
                         # filter candidates by size. Only storing the biggest one
@@ -222,7 +224,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                         current_voxels = np.stack(np.where(labels == argmax), axis =1)
                         filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
 
-                    image_nii.get_data()[:] = np.expand_dims(filtered_mask, axis = 3)
+                    image_nii.get_data()[:] = filtered_mask
                     image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
                 # apped a binary mask of the segmentation ouput to used as seed 
@@ -285,15 +287,15 @@ def test_all_scans(subject_names, options):
             image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
             print "debug image proba: ", image_proba.shape
             print current_scan, ': testing on --> ', test_scan, ' (level ', level , ')'
-            for batch_axial, batch_cor, batch_sag, centers in load_patch_batch(subject_names[i], options['test_batch_size'], tuple(options['patch_size']), pos_samples = positive_samples):
+            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'], tuple(options['patch_size']), pos_samples = positive_samples):
                 print current_scan, batch_axial.shape
                 # predict classes
-                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
                 [x, y, z] = np.stack(centers, axis=1)
-                image[x, y, z] = np.expand_dims(y_pred, axis = 1)
+                image[x, y, z] = y_pred
 
                 # predict probabilities 
-                y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
                 for c in range(15):
                     image_proba[x, y, z, c] = y_pred_proba[:,c]
 
@@ -306,10 +308,10 @@ def test_all_scans(subject_names, options):
             # filter-out fp by taking only the higher area.
             # iterate for each of the classes
             filtered_mask = np.zeros_like(image)
-
+            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'mni_mask_subcortical.nii.gz')).get_data()
             for l in range(1,15):
                 print "     processing label ", l
-                th_label = image == l
+                th_label = np.logical_and(image == l, atlas) 
                 labels, num_labels = ndimage.label(th_label)
             
                 label_list = np.unique(labels)
@@ -322,7 +324,7 @@ def test_all_scans(subject_names, options):
                 current_voxels = np.stack(np.where(labels == argmax), axis =1)
                 filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
     
-            image_nii.get_data()[:] = np.expand_dims(filtered_mask, axis = 3)
+            image_nii.get_data()[:] = filtered_mask
             image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
             # take positive samples from the segmentation and used as seed for the next iteration 

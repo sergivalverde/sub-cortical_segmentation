@@ -266,7 +266,7 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
         lesion_centers = get_mask_voxels(pos_samples.astype(np.bool))
 
     # load atlas
-    dir_name = '/mnt/DATA/w/CNN_CORT/images/IBSR18'
+
     #atlas_name = os.path.join(dir_name, current_scan, 'build_atlas15', 'prior_atlas_4D_train_15_classes_' + current_scan + '.nii.gz')
     atlas_name = os.path.join(dir_name, current_scan, 'mni_atlas', 'MNI_sub_prob_def.nii.gz')
     atlas_image =  load_nii(atlas_name).get_data()
