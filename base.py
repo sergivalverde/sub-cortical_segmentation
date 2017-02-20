@@ -209,7 +209,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     filtered_mask = np.zeros_like(image)
 
                     # load mni binary mask to guide the segmentation 
-                    atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'mni_mask_subcortical.nii.gz')).get_data()
+                    atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
                     for l in range(1,15):
                         print "     processing label ", l
                         th_label = np.logical_and(image == l, atlas)
@@ -308,7 +308,7 @@ def test_all_scans(subject_names, options):
             # filter-out fp by taking only the higher area.
             # iterate for each of the classes
             filtered_mask = np.zeros_like(image)
-            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'mni_mask_subcortical.nii.gz')).get_data()
+            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
             for l in range(1,15):
                 print "     processing label ", l
                 th_label = np.logical_and(image == l, atlas) 
