@@ -152,7 +152,8 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
 
 
             # fit the classifier. save weights when finished
-            net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
+            #net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
+            net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
 
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
@@ -182,13 +183,15 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                                                                                               dir_name = options['folder'],
                                                                                               current_scan = current_scan):
 
-                        y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                        #y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                        y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                         [x, y, z] = np.stack(centers, axis=1)
                         image[x, y, z] = y_pred
 
                         # if the current scan is tested, also compute probabilities
                         if i==j:
-                            y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                            #y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                            y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                             for c in range(15):
                                 image_proba[x, y, z, c] = y_pred_proba[:,c]
 
@@ -290,12 +293,14 @@ def test_all_scans(subject_names, options):
             for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'], tuple(options['patch_size']), pos_samples = positive_samples):
                 print current_scan, batch_axial.shape
                 # predict classes
-                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                #y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                 [x, y, z] = np.stack(centers, axis=1)
                 image[x, y, z] = y_pred
 
                 # predict probabilities 
-                y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                #y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                 for c in range(15):
                     image_proba[x, y, z, c] = y_pred_proba[:,c]
 
@@ -492,8 +497,9 @@ def build_model(subject_path, options, level = 0):
     saggital_ch = DropoutLayer(saggital_ch, name = 'saggital_l1drop', p=0.5)
 
     # concatenate channels
-    atlas_layer = InputLayer(name='in4', shape=(None, 15))
-    layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch, atlas_layer])
+    #atlas_layer = InputLayer(name='in4', shape=(None, 15))
+    #layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch, atlas_layer])
+    layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch])
 
     
     # fully connected layer 
