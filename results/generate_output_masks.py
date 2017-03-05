@@ -133,7 +133,7 @@ def generate_masks(options, f):
         
 options  = {}
 options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/test_set'
-options['model'] = 'miccai_32_cascade_noatlas'       
+options['model'] = 'miccai_32_cascade_atlas'       
 options['stucts'] = ['Thalamus R', 'Thalamus L', 'Caudate R', 'Caudate L', 'Putament R', 'Putamen L', 'Pallidum R', 'Pallidum L', 'Hipo R', 'Hipo L', 'Amig R', 'Amig L', 'Acc R', 'Acc L']
 options['show_struct_results'] = False
 

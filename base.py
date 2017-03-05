@@ -215,12 +215,12 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
                     for l in range(1,15):
                         print "     processing label ", l
-                        th_label = np.logical_and(image == l, atlas)
+                        th_label = image == l
                         labels, num_labels = ndimage.label(th_label)
                         label_list = np.unique(labels)
                         # filter candidates by size. Only storing the biggest one
 
-                        num_elements_by_lesion = ndimage.labeled_comprehension(th_label, labels, label_list, np.sum, float, 0)
+                        num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
                         argmax = np.argmax(num_elements_by_lesion)
 
                         # assign voxels to output
@@ -316,17 +316,16 @@ def test_all_scans(subject_names, options):
 
             # filter-out fp by taking only the higher area.
             # iterate for each of the classes
-            filtered_mask = np.zeros_like(image)
+            filtered_mask = np.zeros_like(image)            
             atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
             for l in range(1,15):
                 print "     processing label ", l
-                th_label = np.logical_and(image == l, atlas) 
+                th_label = image == l
                 labels, num_labels = ndimage.label(th_label)
-            
                 label_list = np.unique(labels)
                 # filter candidates by size. Only storing the biggest one
 
-                num_elements_by_lesion = ndimage.labeled_comprehension(th_label, labels, label_list, np.sum, float, 0)
+                num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
                 argmax = np.argmax(num_elements_by_lesion)
 
                 # assign voxels to output
