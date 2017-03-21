@@ -16,6 +16,7 @@ from lasagne.layers.dnn import Conv3DDNNLayer, MaxPool3DDNNLayer, Conv2DDNNLayer
 from lasagne.nonlinearities import softmax, rectify
 nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
 
+
 def load_data(options):
     """
     Extact data from all images.  For all database image, patches from each image view (axial, coronal and saggital) are computed.
@@ -127,19 +128,13 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             print 'LEVEL ', level +1
             print '--------------------------------------------------\n'
             
-            # load training data for the current scan
-            x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, centers = centers, k_fold = k)
 
-            print "\n--------------------------------------------------"
-            print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
-            print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
-            print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
-            print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
-            print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
-            print "--------------------------------------------------\n"
-
-            # build the network model 
-            # if selected, load previous weights
+            # Build the network, if selected, load previous weights
+            # If resampling positive classes, resample each "epochs_by_sample"
+            
+            if options['re-sampling']:
+                options['max_epochs'] = options['epochs_by_sample']
+                
             print current_scan + ' Build the model'
             net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
 
@@ -150,17 +145,89 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 except:
                     print  current_scan, 'No network weights available. Training from scratch.'
 
+            if options['re-sampling']:
+                iterations = options['max_epochs'] / options['epochs_by_sample']
+                for it in range(iterations):
 
-            # fit the classifier. save weights when finished
-            net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
-            #net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
+                    # load training data for the current scan
+                    x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, centers = centers, k_fold = k)
+
+                    print "\n--------------------------------------------------"
+                    print current_scan, '---- iteration: ', it, '----'
+                    print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+                    print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+                    print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
+                    print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
+                    print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+                    print "--------------------------------------------------\n"
+            
+                    # fit the classifier. save weights when finished
+                    net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
+            else:
+                print "\n--------------------------------------------------"
+                print current_scan, '---- iteration: ', it, '----'
+                print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+                print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+                print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
+                print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
+                print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+                print "--------------------------------------------------\n"
+                net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
 
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
 
+            # test the scan not used for training
+            image_nii = load_nii(subject_names[i])
+            image = np.zeros_like(image_nii.get_data())
+            
+            print current_scan, ': testing on --> ', test_scan
+            
+            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[j],
+                                                                                      options['test_batch_size'],
+                                                                                      tuple(options['patch_size']),
+                                                                                      dir_name = options['folder'],
+                                                                                      current_scan = current_scan):
+
+                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                [x, y, z] = np.stack(centers, axis=1)
+                image[x, y, z] = y_pred
+            
+            # save segmentation masks for debugging in '.train'.
+            # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
+            image_nii.get_data()[:] = image
+            image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
+
+            # filter-out fp by taking only the higher area.
+            # iterate for each of the classes
+            filtered_mask = np.zeros_like(image)
+
+            # load mni binary mask to guide the segmentation 
+            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+            for l in range(1,15):
+                print "     processing label ", l
+                th_label = image == l
+                labels, num_labels = ndimage.label(th_label)
+                label_list = np.unique(labels)
+                # filter candidates by size. Only storing the biggest one
+
+                num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
+                argmax = np.argmax(num_elements_by_lesion)
+                
+                # assign voxels to output
+                current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+
+            image_nii.get_data()[:] = filtered_mask
+            image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
+
+            
+            '''
             # if selected, test the network. Running in batch to reduce the amount of RAM.
             print current_scan , 'Testing subjects ----------------------------'
             out_masks = []
+
             
             for j in range(len(subject_names)):
 
@@ -240,7 +307,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                                                                                         size=tuple(options['patch_size']),
                                                                                         seeds = out_masks)
 
-            
+            '''
             
 def test_all_scans(subject_names, options):
     """
@@ -397,15 +464,35 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     y_train = y_train[:, y_train.shape[1] / 2, y_train.shape[2] / 2]
     y_train = np.squeeze(y_train)
 
+    y_train[y_train==15] = 0
+
+    if options['re-sampling']:
+
+        # balance positive classes
+        # compute the frequency of each of the classes to obtain the class with less samples
+        h, f = np.histogram(y_train, bins = 15)
+        min_class = np.argmin(h)
+        min_element = np.min(h)
+
+        # new balanced indices with the same positves samples than negatives
+        # permute indices before selecting patches
+        y_indices_neg = np.where(y_train == 0)[0][:min_element*14]
+        y_indices_pos = [np.where(y_train == i)[0][:min_element] for i in range(1,15)]
+        y_indices_pos = np.concatenate(y_indices_pos, axis = 0)
+        y_indices = np.random.permutation(np.concatenate([y_indices_neg, y_indices_pos], axis = 0))
+
+        # assing new patch samples for training 
+        y_train = y_train[y_indices]
+        x_train_axial = x_train_axial[y_indices]
+        x_train_cor = x_train_cor[y_indices]
+        x_train_sag = x_train_sag[y_indices]
+        train_atlas = train_atlas[y_indices]
+        
     # The net expects training data with shape [samples, channels, p1, p2]
     # reshape arrays for single channel
     x_train_axial = np.expand_dims(x_train_axial, axis = 1)
     x_train_cor = np.expand_dims(x_train_cor, axis = 1)
     x_train_sag = np.expand_dims(x_train_sag, axis = 1)
-
-    # IBSR related: a selected background around structs is selected in label mask to separate from the rest
-    # of background. background has label = 15 but should be 0.
-    y_train[y_train==15] = 0
 
     print "X_TRAIN: ", x_train_axial.shape[0]
     print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
@@ -449,6 +536,9 @@ def build_model(subject_path, options, level = 0):
     # build the architecture 
 
     ps = 32
+    p_drop = 0.4
+    num_filt = 40
+    num_fc = 80
     num_channels = 1
 
     # --------------------------------------------------
@@ -456,59 +546,69 @@ def build_model(subject_path, options, level = 0):
     # --------------------------------------------------
     # input: 32
     axial_ch = InputLayer(name='in1', shape=(None, num_channels, ps, ps))
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv1', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu1')
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv2', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu2')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv1', num_filters=num_filt, filter_size=3)),  name = 'axial_ch_prelu1')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv2', num_filters=num_filt, filter_size=3)),  name = 'axial_ch_prelu2')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv3', num_filters=num_filt, filter_size=3)),  name = 'axial_ch_prelu3')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv4', num_filters=num_filt, filter_size=3)),  name = 'axial_ch_prelu4')
     axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_1', pool_size=2)
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv3', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu3')
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv4', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu4')
-    axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_2', pool_size=2)
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv5', num_filters=60, filter_size=3)),  name = 'axial_ch_prelu5')
-    axial_ch = DenseLayer(axial_ch, name='axial_d1', num_units = 60)
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv5', num_filters=num_filt*2, filter_size=3)),  name = 'axial_ch_prelu5')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv6', num_filters=num_filt*2, filter_size=3)),  name = 'axial_ch_prelu6')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv7', num_filters=num_filt*2, filter_size=3)),  name = 'axial_ch_prelu7')
+    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv8', num_filters=num_filt*2, filter_size=3)),  name = 'axial_ch_prelu8')
+    axial_ch = DenseLayer(axial_ch, name='axial_d1', num_units = num_fc)
     axial_ch = prelu(axial_ch, name = 'axial_prelu_d1')
-    axial_ch = DropoutLayer(axial_ch, name = 'axial_l1drop', p=0.5)
+    axial_ch = DropoutLayer(axial_ch, name = 'axial_l1drop', p=p_drop)
 
     # --------------------------------------------------
     # channel_1: coronal
     # --------------------------------------------------
     # input: 32
     coronal_ch = InputLayer(name='in2', shape=(None, num_channels, ps, ps))
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv1', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu1')
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv2', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu2')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv1', num_filters=num_filt, filter_size=3)),  name = 'coronal_ch_prelu1')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv2', num_filters=num_filt, filter_size=3)),  name = 'coronal_ch_prelu2')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv3', num_filters=num_filt, filter_size=3)),  name = 'coronal_ch_prelu3')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv4', num_filters=num_filt, filter_size=3)),  name = 'coronal_ch_prelu4')
     coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_1', pool_size=2)
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv3', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu3')
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv4', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu4')
-    coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_2', pool_size=2)
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv5', num_filters=60, filter_size=3)),  name = 'coronal_ch_prelu5')
-    coronal_ch = DenseLayer(coronal_ch, name='coronal_d1', num_units = 60)
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv5', num_filters=num_filt*2, filter_size=3)),  name = 'coronal_ch_prelu5')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv6', num_filters=num_filt*2, filter_size=3)),  name = 'coronal_ch_prelu6')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv7', num_filters=num_filt*2, filter_size=3)),  name = 'coronal_ch_prelu7')
+    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv8', num_filters=num_filt*2, filter_size=3)),  name = 'coronal_ch_prelu8')
+    coronal_ch = DenseLayer(coronal_ch, name='coronal_d1', num_units = num_fc)
     coronal_ch = prelu(coronal_ch, name = 'coronal_prelu_d1')
-    coronal_ch = DropoutLayer(coronal_ch, name = 'coronal_l1drop', p=0.5)
+    coronal_ch = DropoutLayer(coronal_ch, name = 'coronal_l1drop', p=p_drop)
 
     # --------------------------------------------------
     # channel_1: saggital
     # --------------------------------------------------
     # input: 32
     saggital_ch = InputLayer(name='in3', shape=(None, num_channels, ps, ps))
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv1', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu1')
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv2', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu2')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv1', num_filters=num_filt, filter_size=3)),  name = 'saggital_ch_prelu1')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv2', num_filters=num_filt, filter_size=3)),  name = 'saggital_ch_prelu2')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv3', num_filters=num_filt, filter_size=3)),  name = 'saggital_ch_prelu3')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv4', num_filters=num_filt, filter_size=3)),  name = 'saggital_ch_prelu4')
     saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_1', pool_size=2)
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv3', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu3')
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv4', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu4')
-    saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_2', pool_size=2)
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv5', num_filters=60, filter_size=3)),  name = 'saggital_ch_prelu5')
-    saggital_ch = DenseLayer(saggital_ch, name='saggital_d1', num_units = 60)
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv5', num_filters=num_filt*2, filter_size=3)),  name = 'saggital_ch_prelu5')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv6', num_filters=num_filt*2, filter_size=3)),  name = 'saggital_ch_prelu6')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv7', num_filters=num_filt*2, filter_size=3)),  name = 'saggital_ch_prelu7')
+    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv8', num_filters=num_filt*2, filter_size=3)),  name = 'saggital_ch_prelu8')
+    saggital_ch = DenseLayer(saggital_ch, name='saggital_d1', num_units = num_fc)
     saggital_ch = prelu(saggital_ch, name = 'saggital_prelu_d1')
-    saggital_ch = DropoutLayer(saggital_ch, name = 'saggital_l1drop', p=0.5)
-
+    saggital_ch = DropoutLayer(saggital_ch, name = 'saggital_l1drop', p=p_drop)
+    
     # concatenate channels
     atlas_layer = InputLayer(name='in4', shape=(None, 15))
     layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch, atlas_layer])
-    #layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch])
-
     
-    # fully connected layer 
-    layer = DenseLayer(layer, name='fc_2', num_units = 60)
+    # fully connected layer
+    fc_units = num_fc * 3 + 15
+    layer = DenseLayer(layer, name='fc_2', num_units = fc_units)
     layer = prelu(layer, name = 'prelu_f2')
-    layer = DropoutLayer(layer, name = 'f2_drop', p=0.3)
+    layer = DropoutLayer(layer, name = 'f2_drop', p=p_drop)
+
+    # fully connected layer
+    layer = DenseLayer(layer, name='fc_3', num_units = fc_units)
+    layer = prelu(layer, name = 'prelu_f3')
+    layer = DropoutLayer(layer, name = 'f2_drop', p=p_drop)
 
     # softmax
     net_layer = DenseLayer(layer, name='out_layer', num_units = 15, nonlinearity=softmax)

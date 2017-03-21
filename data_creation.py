@@ -56,10 +56,9 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
     sag_x_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(images_norm,  p_vox_coord_pos)]
     sag_y_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(labels, p_vox_coord_pos)]
     
-    # negatives class (background) class 15. sampling the same number of negatives of the rest of classes.
-    # If a list of images with voxels classified as positive classes is passed as input, use it to select the negative class 
+    # all negative are taken, as the GT includes only boundary voxels only
     if seeds is None: 
-        n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]        
+        n_vox_coord_pos = [get_mask_voxels(mask==15) for mask, p in zip(labels, p_vox_coord_pos)]        
     else:
         n_vox_coord_pos = [get_mask_voxels(np.logical_and(mask==15, seed ==1),  size=len(p)) for mask, seed, p in zip(labels, seeds, p_vox_coord_pos)]
 
@@ -83,7 +82,6 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
 
     
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, vox_positions, image_names
-
 
 
 def get_atlas_vectors(dir_name, current_scan, centers):
