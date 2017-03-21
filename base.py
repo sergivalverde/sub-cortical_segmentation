@@ -88,9 +88,6 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
     k = options['k-fold']
     for i in range(0,len(subject_names),k):
 
-        if i == 0:
-            continue
-        
         # organize experiments
         current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
         print "\n--------------------------------------------------"
@@ -133,6 +130,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             # If resampling positive classes, resample each "epochs_by_sample"
             
             if options['re-sampling']:
+                iterations = options['max_epochs'] / options['epochs_by_sample']
                 options['max_epochs'] = options['epochs_by_sample']
                 
             print current_scan + ' Build the model'
@@ -146,11 +144,11 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     print  current_scan, 'No network weights available. Training from scratch.'
 
             if options['re-sampling']:
-                iterations = options['max_epochs'] / options['epochs_by_sample']
+                print iterations
                 for it in range(iterations):
 
                     # load training data for the current scan
-                    x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, centers = centers, k_fold = k)
+                    x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
 
                     print "\n--------------------------------------------------"
                     print current_scan, '---- iteration: ', it, '----'
@@ -164,6 +162,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     # fit the classifier. save weights when finished
                     net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
             else:
+                x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
                 print "\n--------------------------------------------------"
                 print current_scan, '---- iteration: ', it, '----'
                 print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
@@ -181,9 +180,9 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             image_nii = load_nii(subject_names[i])
             image = np.zeros_like(image_nii.get_data())
             
-            print current_scan, ': testing on --> ', test_scan
+            print current_scan, ': testing on --> ', current_scan
             
-            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[j],
+            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i],
                                                                                       options['test_batch_size'],
                                                                                       tuple(options['patch_size']),
                                                                                       dir_name = options['folder'],
@@ -203,7 +202,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             filtered_mask = np.zeros_like(image)
 
             # load mni binary mask to guide the segmentation 
-            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+            atlas = load_nii(os.path.join(options['folder'], current_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
             for l in range(1,15):
                 print "     processing label ", l
                 th_label = image == l
@@ -219,7 +218,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
 
             image_nii.get_data()[:] = filtered_mask
-            image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+            image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
 
             
@@ -406,7 +405,7 @@ def test_all_scans(subject_names, options):
             #positive_samples = filtered_mask > 0
 
                 
-def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, centers = None, randomize = True, k_fold = 1):
+def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, options, centers = None, randomize = True, k_fold = 1):
     """
     Generate training features X an Y for each image modality. Remove the current scan "i" and build the training 
     vector. 
@@ -494,9 +493,9 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     x_train_cor = np.expand_dims(x_train_cor, axis = 1)
     x_train_sag = np.expand_dims(x_train_sag, axis = 1)
 
-    print "X_TRAIN: ", x_train_axial.shape[0]
-    print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
-    print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
+    #print "X_TRAIN: ", x_train_axial.shape[0]
+    #print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
+    #print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
     
     return x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train
 
