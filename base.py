@@ -164,7 +164,6 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             else:
                 x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
                 print "\n--------------------------------------------------"
-                print current_scan, '---- iteration: ', it, '----'
                 print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
                 print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
                 print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
@@ -535,9 +534,9 @@ def build_model(subject_path, options, level = 0):
     # build the architecture 
 
     ps = 32
-    p_drop = 0.4
+    p_drop = 0.3
     num_filt = 40
-    num_fc = 80
+    num_fc = 320
     num_channels = 1
 
     # --------------------------------------------------
@@ -644,4 +643,5 @@ def test_2d_patches(x_axial, x_coronal, x_saggital, scan, patch_num):
     scipy.misc.imsave('axial.png', x_axial[scan][patch_num])
     scipy.misc.imsave('coronal.png', x_coronal[scan][patch_num])
     scipy.misc.imsave('saggital.png', x_saggital[scan][patch_num])
+
 

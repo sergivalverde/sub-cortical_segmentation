@@ -10,7 +10,7 @@ import sys
 options = {}
 options['training'] = True
     
-experiment = 'T_MICCAI_w_RES'
+experiment = 'T_MICCAI_w_net3'
 # - experiment name
 options['experiment'] = experiment
 # - select if save models and masks in separate folders
@@ -41,7 +41,7 @@ options['verbose'] = 11
 options['max_epochs'] = 200
 #resampling options
 
-options['re-sampling'] = True
+options['re-sampling'] = False
 options['epochs_by_sample'] = 10 
 
 # - percentage of training / validation (train_split)
