@@ -551,8 +551,6 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     y = [num_samples, rows, cols]
 
     """
-
-    print "DEBUG DA input:", x_axial.shape, y.shape
     
     # classes used for data augmentation 
     classes = options['classes']
@@ -579,19 +577,18 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
         y_da = np.concatenate([yy_ for i in range(da_size)], axis = 0)
         a_da = np.concatenate([aa_ for i in range(da_size)], axis = 0)
 
-    print "DEBUG DA concatenated input:", xa_.shape, x_axial_.shape
+    
+
     
     num_samples = x_axial_.shape[0]
     random_angles = np.random.randint(size = num_samples, low = -options['max_angle'], high = options['max_angle'])
     random_noise = np.random.normal(0, options['max_noise'], x_axial_.shape)
 
-    print "DEBUG DA input data max min :", x_axial_.min(), x_axial_.max()
+
     # apply noise transformation
     x_axial_ += random_noise
     x_cor_ += random_noise
     x_sag_ += random_noise
-    print "DEBUG DA input data + noise max min :",  x_axial_.min(), x_axial_.max()
-    print "DEBUG DA input data + noise max min :",  random_noise.min(), random_noise.max(), random_noise.mean(), random_noise.std()
 
     
     # rotate and concatenate with input data 
@@ -599,7 +596,7 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     x_sag_da = np.array([rotate(patch.astype('int16'), r, order = 1, mode = 'edge', preserve_range = True) for patch, r in zip(x_sag_, random_angles)])
     x_cor_da = np.array([rotate(patch.astype('int16'), r, order = 1, mode = 'edge', preserve_range = True) for patch, r in zip(x_cor_, random_angles)])
 
-    print "DEBUG:", x_axial_da.shape
+
     # concatenate with input data
 
     # flip patches if selected 
@@ -627,7 +624,7 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     x_cor_da = np.concatenate([x_cor, x_cor_da], axis = 0).astype('float32')
     x_sag_da = np.concatenate([x_sag, x_sag_da], axis = 0).astype('float32')
 
-    print "DEBUG DA out data max min :", x_axial_da.shape, y_da.shape, a_da.shape
+
     return x_axial_da, x_cor_da, x_sag_da, a_da, y_da 
 
 

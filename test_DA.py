@@ -23,8 +23,8 @@ options['use_t1'] = True
 options['t1'] = 'T1.nii.gz'
 # - label name
 #options['mask'] = 'gt_all_subcortical.nii.gz'
-options['mask'] = 'gt_15_classes.nii.gz'
-#options['mask'] = 'gt_15_classes_border2.nii.gz'
+#options['mask'] = 'gt_15_classes.nii.gz'
+options['mask'] = 'gt_15_classes_border2.nii.gz'
 # - output segmentation name 
 options['out_mask'] = 'CNN_' + experiment
 # - number of CNN channels in the feature vector
@@ -59,7 +59,7 @@ options['data_augmentation'] = True
 options['classes'] = [7,8,11,12,13,14]
 options['da_size'] = 10
 options['max_angle'] = 6
-options['max_noise'] = 0.25
+options['max_noise'] = 0.20
 options['da_shuffle'] = False
 options['da_flip'] = False
 #-------------------------------------------------------------------------------------
