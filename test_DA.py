@@ -10,7 +10,7 @@ import sys
 options = {}
 options['training'] = True
 
-experiment = 'T_MICCAI_w_orig_fc240_ATLAS'
+experiment = 'TEST_DA'
 # - experiment name
 options['experiment'] = experiment
 # - select if save models and masks in separate folders
@@ -23,8 +23,8 @@ options['use_t1'] = True
 options['t1'] = 'T1.nii.gz'
 # - label name
 #options['mask'] = 'gt_all_subcortical.nii.gz'
-#options['mask'] = 'gt_15_classes.nii.gz'
-options['mask'] = 'gt_15_classes_border2.nii.gz'
+options['mask'] = 'gt_15_classes.nii.gz'
+#options['mask'] = 'gt_15_classes_border2.nii.gz'
 # - output segmentation name 
 options['out_mask'] = 'CNN_' + experiment
 # - number of CNN channels in the feature vector
@@ -55,21 +55,21 @@ options['load_weights'] = True
 options['testing'] = True
 options['levels'] = 1
 
-options['data_augmentation'] = False
+options['data_augmentation'] = True 
 options['classes'] = [7,8,11,12,13,14]
-options['da_size'] = 4
+options['da_size'] = 10
 options['max_angle'] = 6
 options['max_noise'] = 0.25
-options['da_shuffle'] = True
-options['da_flip'] = True 
+options['da_shuffle'] = False
+options['da_flip'] = False
 #-------------------------------------------------------------------------------------
 
 # main script for leave-one-out training 
 if __name__ == '__main__':
     if options['training'] is True:
         # load feature data and perform leave-one-out training
-        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/training_set'
         #options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/train_tests'
+        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/training_set'
         x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names = load_data(options)
         k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)
     else:
