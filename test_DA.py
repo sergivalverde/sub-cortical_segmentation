@@ -8,7 +8,7 @@ import sys
 
 # select arguments 
 options = {}
-options['training'] = True
+options['training'] = False
 
 experiment = 'TEST_DA'
 # - experiment name
@@ -56,8 +56,8 @@ options['testing'] = True
 options['levels'] = 1
 
 options['data_augmentation'] = True 
-options['classes'] = [7,8,11,12,13,14]
-options['da_size'] = 10
+options['classes'] = [11,12,13,14]
+options['da_size'] = 6
 options['max_angle'] = 6
 options['max_noise'] = 0.20
 options['da_shuffle'] = False

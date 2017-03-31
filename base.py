@@ -7,13 +7,7 @@ import nibabel as nib
 from scipy import ndimage
 import scipy.io as io
 from data_creation import load_patches, load_only_names, load_patch_batch, get_atlas_vectors
-from nolearn.lasagne import NeuralNet, BatchIterator, TrainSplit
-from nolearn_utils.hooks import SaveTrainingHistory, PlotTrainingHistory, EarlyStopping
-from lasagne import objectives, updates
-from nolearn.lasagne.handlers import SaveWeights
-from lasagne.layers import InputLayer, DenseLayer, DropoutLayer, FeaturePoolLayer, LocalResponseNormalization2DLayer, BatchNormLayer, prelu, ConcatLayer, ElemwiseSumLayer
-from lasagne.layers.dnn import Conv3DDNNLayer, MaxPool3DDNNLayer, Conv2DDNNLayer, MaxPool2DDNNLayer, Pool3DDNNLayer, batch_norm_dnn
-from lasagne.nonlinearities import softmax, rectify
+from nets import build_model
 from skimage.transform import SimilarityTransform, warp, AffineTransform, rotate 
 nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
 
@@ -40,11 +34,11 @@ def load_data(options):
       - image names 
     """
     
-    (x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names) = load_patches(
-        dir_name=options['folder'],
-        t1_name=options['t1'],
-        mask_name=options['mask'],
-        size=tuple(options['patch_size']))
+    (x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names) = load_patches(dir_name=options['folder'],
+                                                                                  t1_name=options['t1'],
+                                                                                  mask_name=options['mask'],
+                                                                                  size=tuple(options['patch_size']),
+                                                                                  balance_neg = options['balance_neg'])
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names
 
 
@@ -119,6 +113,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
         y_sag_ = y_sag
                         
         centers = all_centers
+        
         for level in range(options['levels']):
 
             
@@ -126,14 +121,16 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             print 'LEVEL ', level +1
             print '--------------------------------------------------\n'
             
-
             # Build the network, if selected, load previous weights
             # If resampling positive classes, resample each "epochs_by_sample"
             
             if options['re-sampling']:
                 iterations = options['max_epochs'] / options['epochs_by_sample']
                 options['max_epochs'] = options['epochs_by_sample']
-                
+
+                print "Re-sampling is enabled...."
+                print "Num iterations:", iterations, "max epochs by iteration" , options['max_epochs']
+
             print current_scan + ' Build the model'
             net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
 
@@ -142,7 +139,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
                     net.load_params_from(net_weights)
                 except:
-                    print  current_scan, 'No network weights available. Training from scratch.'
+                    print  current_scan, 'No network weights available. Training from scratch'
 
             if options['re-sampling']:
                 print iterations
@@ -150,16 +147,17 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
 
                     # load training data for the current scan
                     x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
-                    '''
-                    print "\n--------------------------------------------------"
-                    print current_scan, '---- iteration: ', it, '----'
-                    print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
-                    print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
-                    print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
-                    print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
-                    print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
-                    print "--------------------------------------------------\n"
-                    '''
+
+                    if it == 0:                
+                        print "\n--------------------------------------------------"
+                        print current_scan, '---- iteration: ', it, '----'
+                        print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+                        print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+                        print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
+                        print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
+                        print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+                        print "--------------------------------------------------\n"
+                    
                     # fit the classifier. save weights when finished
                     net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
             else:
@@ -171,144 +169,58 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
                 print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
                 print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
-                
                 print "--------------------------------------------------\n"
+                # fit the model 
                 net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
 
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
 
-            # test the scan not used for training
-            image_nii = load_nii(subject_names[i])
-            image = np.zeros_like(image_nii.get_data())
+            if options['testing']:
+                # test the scan not used for training
+                image_nii = load_nii(subject_names[i])
+                image = np.zeros_like(image_nii.get_data())
             
-            print current_scan, ': testing on --> ', current_scan
-            
-            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i],
-                                                                                      options['test_batch_size'],
-                                                                                      tuple(options['patch_size']),
-                                                                                      dir_name = options['folder'],
-                                                                                      current_scan = current_scan):
+                print current_scan, ': testing on --> ', current_scan
+                
+                for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i],
+                                                                                          options['test_batch_size'],
+                                                                                          tuple(options['patch_size']),
+                                                                                          dir_name = options['folder'],
+                                                                                          current_scan = current_scan):
 
-                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
-                [x, y, z] = np.stack(centers, axis=1)
-                image[x, y, z] = y_pred
-            
+                    y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                    [x, y, z] = np.stack(centers, axis=1)
+                    image[x, y, z] = y_pred
+
             # save segmentation masks for debugging in '.train'.
-            # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
-            image_nii.get_data()[:] = image
-            image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
+                # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
+                image_nii.get_data()[:] = image
+                image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
 
-            # filter-out fp by taking only the higher area.
-            # iterate for each of the classes
-            filtered_mask = np.zeros_like(image)
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(image)
 
-            # load mni binary mask to guide the segmentation 
-            atlas = load_nii(os.path.join(options['folder'], current_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
-            for l in range(1,15):
-                print "     processing label ", l
-                th_label = image == l
-                labels, num_labels = ndimage.label(th_label)
-                label_list = np.unique(labels)
-                # filter candidates by size. Only storing the biggest one
+                # load mni binary mask to guide the segmentation 
+                atlas = load_nii(os.path.join(options['folder'], current_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = image == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
 
-                num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
-                argmax = np.argmax(num_elements_by_lesion)
-                
-                # assign voxels to output
-                current_voxels = np.stack(np.where(labels == argmax), axis =1)
-                filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+                    num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
 
-            image_nii.get_data()[:] = filtered_mask
-            image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
 
+                image_nii.get_data()[:] = filtered_mask
+                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
-            
-            '''
-            # if selected, test the network. Running in batch to reduce the amount of RAM.
-            print current_scan , 'Testing subjects ----------------------------'
-            out_masks = []
-
-            
-            for j in range(len(subject_names)):
-
-                test_scan = os.path.split(os.path.split(subject_names[j])[0])[-1]
-
-                # dont process the last iteration if its not necessary 
-                if (i is not j) and (level == options['levels']-1):
-                    continue
-                
-                # avoid re-test if exists the mask used as seed for the next iteration
-                if os.path.exists(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz')):
-                    filtered_mask = load_nii(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz')).get_data()
-                else:
-                    image_nii = load_nii(subject_names[j])
-                    image = np.zeros_like(image_nii.get_data())
-                    image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
-                    print current_scan, ': testing on --> ', test_scan
-
-                    for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[j], options['test_batch_size'], tuple(options['patch_size']),
-                                                                                              dir_name = options['folder'],
-                                                                                              current_scan = current_scan):
-
-                        y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
-                        #y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
-                        [x, y, z] = np.stack(centers, axis=1)
-                        image[x, y, z] = y_pred
-
-                        # if the current scan is tested, also compute probabilities
-                        if i==j:
-                            y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
-                            #y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
-                            for c in range(15):
-                                image_proba[x, y, z, c] = y_pred_proba[:,c]
-
-
-                    # save segmentation masks for debugging in '.train'.
-                    # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
-                    image_nii.get_data()[:] = image
-                    image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_level_' + str(level) + '.nii.gz'))
-
-                    if i==j:
-                        image_nii.get_data()[:] = image
-                        image_nii.to_filename(os.path.join(exp_folder, current_scan + '_level_' + str(level) + '.nii.gz'))
-                        image_out = nib.Nifti1Image(image_proba, np.eye(4))
-                        image_out.to_filename(os.path.join(exp_folder, current_scan + '_level_' + str(level) + '_proba.nii.gz'))
-
-                    # filter-out fp by taking only the higher area.
-                    # iterate for each of the classes
-                    filtered_mask = np.zeros_like(image)
-
-                    # load mni binary mask to guide the segmentation 
-                    atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
-                    for l in range(1,15):
-                        print "     processing label ", l
-                        th_label = image == l
-                        labels, num_labels = ndimage.label(th_label)
-                        label_list = np.unique(labels)
-                        # filter candidates by size. Only storing the biggest one
-
-                        num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
-                        argmax = np.argmax(num_elements_by_lesion)
-
-                        # assign voxels to output
-                        current_voxels = np.stack(np.where(labels == argmax), axis =1)
-                        filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
-
-                    image_nii.get_data()[:] = filtered_mask
-                    image_nii.to_filename(os.path.join(exp_folder, '.train', test_scan + '_filt_level_' + str(level) + '.nii.gz'))
-
-                # apped a binary mask of the segmentation ouput to used as seed 
-                out_masks.append(filtered_mask > 0)
-                
-            # reload the training data using the worst examples as a seeds
-            x_axial_, y_axial_, x_cor_, y_cor_, x_sag_, y_sag_, centers, names = load_patches(dir_name=options['folder'],
-                                                                                        t1_name=options['t1'],
-                                                                                        mask_name=options['mask'],
-                                                                                        size=tuple(options['patch_size']),
-                                                                                        seeds = out_masks)
-
-            '''
             
 def test_all_scans(subject_names, options):
     """
@@ -370,17 +282,18 @@ def test_all_scans(subject_names, options):
                 [x, y, z] = np.stack(centers, axis=1)
                 image[x, y, z] = y_pred
 
-                # predict probabilities 
-                y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
-                #y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
-                for c in range(15):
-                    image_proba[x, y, z, c] = y_pred_proba[:,c]
+                if options['out_probabilities']:
+                    # predict probabilities 
+                    y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                    for c in range(15):
+                        image_proba[x, y, z, c] = y_pred_proba[:,c]
 
             # save segmentations 
             image_nii.get_data()[:] = image
             image_nii.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '.nii.gz'))
-            image_out = nib.Nifti1Image(image_proba, np.eye(4))
-            image_out.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '_proba.nii.gz'))
+            if options['out_probabilities']:
+                image_out = nib.Nifti1Image(image_proba, np.eye(4))
+                image_out.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '_proba.nii.gz'))
 
             # filter-out fp by taking only the higher area.
             # iterate for each of the classes
@@ -437,12 +350,13 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     # control the number of samples used for training 
 
     # generate a training set by leaving out the scan used for training 
-    x_train_axial = np.concatenate(x_axial[:index] + x_axial[index+k_fold:], axis = 0)
-    x_train_cor =   np.concatenate(x_coronal[:index] + x_coronal[index+k_fold:], axis = 0)
-    x_train_sag =   np.concatenate(x_saggital[:index] + x_saggital[index+k_fold:], axis = 0)
+    x_train_axial = np.concatenate(x_axial[:index] + x_axial[index+k_fold:], axis = 0).astype('float32')
+    x_train_cor =   np.concatenate(x_coronal[:index] + x_coronal[index+k_fold:], axis = 0).astype('float32')
+    x_train_sag =   np.concatenate(x_saggital[:index] + x_saggital[index+k_fold:], axis = 0).astype('float32')
+
     
     # using voxelwise segmentation. so only one segmentation is needed.
-    y_train = np.concatenate(y[:index] + y[index+k_fold:])
+    y_train = np.concatenate(y[:index] + y[index+k_fold:]).astype('uint8')
 
     # voxelwise:  convert labels to one-dimensional vector
     y_train = y_train[:, y_train.shape[1] / 2, y_train.shape[2] / 2]
@@ -451,14 +365,10 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     y_train[y_train==15] = 0
 
     atlas = get_atlas_vectors(training_folder, current_scan, centers)
-    train_atlas = np.concatenate(atlas[:index] + atlas[index+k_fold:])
+    train_atlas = np.concatenate(atlas[:index] + atlas[index+k_fold:]).astype('float32')
 
     # plot class frequencies
     
-    h, f = np.histogram(y_train, bins = 15)
-    for c in range(15):
-        print "CLASS: ", c, h[c]
-        
 
     if options['data_augmentation']:
         x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = data_augmentation(x_train_axial,
@@ -467,26 +377,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
                                                                              train_atlas,
                                                                              y_train,
                                                                              options)
-        # plot class frequencies 
-        h, f = np.histogram(y_train, bins = 15)
-        for c in range(15):
-            print "CLASS DA: ", c, h[c]
 
-    '''
-    # randomize the training set
-    if randomize:
-        seed = np.random.randint(np.iinfo(np.int32).max)
-        np.random.seed(seed)
-        x_train_axial = np.random.permutation(np.concatenate(x_train_axial).astype(dtype=np.float32))
-        np.random.seed(seed)
-        x_train_cor = np.random.permutation(np.concatenate(x_train_cor).astype(dtype=np.float32))
-        np.random.seed(seed)
-        x_train_sag = np.random.permutation(np.concatenate(x_train_sag).astype(dtype=np.float32))
-        np.random.seed(seed)
-        y_train = np.random.permutation(np.concatenate(y_train).astype(dtype=np.uint8))
-        np.random.seed(seed)
-        train_atlas = np.random.permutation(np.concatenate(train_atlas).astype(dtype=np.float32))
-    '''
     if randomize:
         seed = np.random.randint(np.iinfo(np.int32).max)
         np.random.seed(seed)
@@ -500,7 +391,6 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         np.random.seed(seed)
         train_atlas = np.random.permutation(train_atlas)
     
-
             
     if options['re-sampling']:
 
@@ -524,10 +414,6 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         x_train_sag = x_train_sag[y_indices]
         train_atlas = train_atlas[y_indices]
 
-        # plot class frequencies
-        for c in range(15):
-            print "CLASS: ", c, h[c]
-        
 
     # The net expects training data with shape [samples, channels, p1, p2]
     # reshape arrays for single channel
@@ -554,32 +440,32 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     
     # classes used for data augmentation 
     classes = options['classes']
+    class_size = options['class_size']
     
-    if classes == None: 
-        da_size = 3
-        x_axial_ = np.concatenate([x_axial for i in range(da_size)], axis = 0)
-        x_cor_ = np.concatenate([x_cor for i in range(da_size)], axis = 0)
-        x_sag_ = np.concatenate([x_sag for i in range(da_size)], axis = 0)
-        y_da = np.concatenate([y for i in range(da_size)], axis = 0)
-        a_da = np.concatenate([atlas for i in range(da_size)], axis = 0)
-    else:
+    # augment the number of elements for each of the selected classes. The number of elements for each clas
+    # is controled by class size
+    x_axial_ = np.concatenate([np.array([x_axial[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+    x_cor_ = np.concatenate([np.array([x_cor[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+    x_sag_ = np.concatenate([np.array([x_sag[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+    y_da = np.concatenate([np.array([y[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+    atlas_da = np.concatenate([np.array([atlas[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+
+        '''
         # extract patches for augmenting
         xa_ = np.concatenate([x_axial[y == c] for c in classes], axis = 0)
         xc_ = np.concatenate([x_cor[y == c] for c in classes], axis = 0)
         xs_ = np.concatenate([x_sag[y == c] for c in classes], axis = 0)
         yy_ = np.concatenate([y[y == c] for c in classes], axis = 0)
         aa_ = np.concatenate([atlas[y == c] for c in classes], axis = 0)
-        da_size = options['da_size']
+        da_size = options['class_size']
         # expand classes
         x_axial_ = np.concatenate([xa_ for i in range(da_size)], axis = 0)
         x_cor_ = np.concatenate([xc_ for i in range(da_size)], axis = 0)
         x_sag_ = np.concatenate([xs_ for i in range(da_size)], axis = 0)
         y_da = np.concatenate([yy_ for i in range(da_size)], axis = 0)
         a_da = np.concatenate([aa_ for i in range(da_size)], axis = 0)
+        '''
 
-    
-
-    
     num_samples = x_axial_.shape[0]
     random_angles = np.random.randint(size = num_samples, low = -options['max_angle'], high = options['max_angle'])
     random_noise = np.random.normal(0, options['max_noise'], x_axial_.shape)
@@ -626,125 +512,6 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
 
 
     return x_axial_da, x_cor_da, x_sag_da, a_da, y_da 
-
-
-def build_model(subject_path, options, level = 0):
-    """
-    Build the CNN model. Create the Neural Net object and return it back. 
-    Inputs: 
-    - subject name: used to save the net weights accordingly.
-    - options: several hyper-parameters used to configure the net.
-    - level: cascade level 
-    
-    Output:
-    - net: a NeuralNet object 
-    """
-    # define paths to save weights and nets
-    current_folder = subject_path
-    net_model_name = options['weights_name'][level]
-    
-    # organize_experiments
-    if options['organize_experiments']:
-        net_weights = os.path.join(subject_path, options['experiment'], 'nets',  net_model_name)
-        net_history  = os.path.join(subject_path, options['experiment'], 'nets', net_model_name+'_history.pkl')
-    else:
-        net_weights = os.path.join(subject_path, 'nets',  net_model_name)
-        net_history  = os.path.join(subject_path, 'nets', net_model_name+'_history.pkl')
-
-    # select hyper-parameters
-    t_verbose = options['verbose']  
-    train_split_perc = options['train_split']
-    num_epochs = options['max_epochs']
-    max_epochs_patience = options['patience']
-    early_stopping = EarlyStopping(patience=max_epochs_patience)
-    save_weights = SaveWeights(net_weights, only_best=True, pickle=False)
-    save_training_history = SaveTrainingHistory(net_history)
-
-    # build the architecture 
-
-    ps = 32
-    num_channels = 1
-    fc_1 = 240
-    # --------------------------------------------------
-    # channel_1: axial
-    # --------------------------------------------------
-    # input: 32
-    axial_ch = InputLayer(name='in1', shape=(None, num_channels, ps, ps))
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv1', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu1')
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv2', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu2')
-    axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_1', pool_size=2)
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv3', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu3')
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv4', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu4')
-    axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_2', pool_size=2)
-    axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv5', num_filters=60, filter_size=3)),  name = 'axial_ch_prelu5')
-    axial_ch = DenseLayer(axial_ch, name='axial_d1', num_units = fc_1)
-    axial_ch = prelu(axial_ch, name = 'axial_prelu_d1')
-    axial_ch = DropoutLayer(axial_ch, name = 'axial_l1drop', p=0.5)
-
-    # --------------------------------------------------
-    # channel_1: coronal
-    # --------------------------------------------------
-    # input: 32
-    coronal_ch = InputLayer(name='in2', shape=(None, num_channels, ps, ps))
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv1', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu1')
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv2', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu2')
-    coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_1', pool_size=2)
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv3', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu3')
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv4', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu4')
-    coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_2', pool_size=2)
-    coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv5', num_filters=60, filter_size=3)),  name = 'coronal_ch_prelu5')
-    coronal_ch = DenseLayer(coronal_ch, name='coronal_d1', num_units = fc_1)
-    coronal_ch = prelu(coronal_ch, name = 'coronal_prelu_d1')
-    coronal_ch = DropoutLayer(coronal_ch, name = 'coronal_l1drop', p=0.5)
-
-    # --------------------------------------------------
-    # channel_1: saggital
-    # --------------------------------------------------
-    # input: 32
-    saggital_ch = InputLayer(name='in3', shape=(None, num_channels, ps, ps))
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv1', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu1')
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv2', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu2')
-    saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_1', pool_size=2)
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv3', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu3')
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv4', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu4')
-    saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_2', pool_size=2)
-    saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv5', num_filters=60, filter_size=3)),  name = 'saggital_ch_prelu5')
-    saggital_ch = DenseLayer(saggital_ch, name='saggital_d1', num_units = fc_1)
-    saggital_ch = prelu(saggital_ch, name = 'saggital_prelu_d1')
-    saggital_ch = DropoutLayer(saggital_ch, name = 'saggital_l1drop', p=0.5)
-
-    # concatenate channels
-    atlas_layer = InputLayer(name='in4', shape=(None, 15))
-    layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch, atlas_layer])
-    
-    # fully connected layer 
-    layer = DenseLayer(layer, name='fc_2', num_units = fc_1*3)
-    layer = prelu(layer, name = 'prelu_f2')
-    layer = DropoutLayer(layer, name = 'f2_drop', p=0.3)
-
-    # fully connected layer 
-    layer = DenseLayer(layer, name='fc_3', num_units = fc_1)
-    layer = prelu(layer, name = 'prelu_f3')
-    layer = DropoutLayer(layer, name = 'f3_drop', p=0.3)
-
-    # softmax
-    net_layer = DenseLayer(layer, name='out_layer', num_units = 15, nonlinearity=softmax)
-
-    net =  NeuralNet(
-        layers= net_layer,
-        objective_loss_function=objectives.categorical_crossentropy,
-        update = updates.adadelta,
-        on_epoch_finished=[
-            save_weights,
-            save_training_history,
-            early_stopping,
-        ],
-        verbose= t_verbose,
-        max_epochs= num_epochs,
-        train_split=TrainSplit(eval_size= train_split_perc),
-    )
-    
-    return net
 
 
 def test_2d_patches(x_axial, x_coronal, x_saggital, scan, patch_num):

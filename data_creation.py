@@ -13,7 +13,7 @@ nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
 
 
 
-def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds = None, datatype=np.float32):
+def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds = None, balance_neg = True, datatype=np.float32):
     """
     Generate all patch vectors for all subjects and one sequence (name). This is done for each image view (axial, coronal and axial)
     In subcortical brain tissue segmentation, I am extracting all positive class voxels (classes from 1 to 14) and the same number of
@@ -57,8 +57,11 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
     sag_y_pos_patches = [np.array(get_patches(image, centers, size, mode = 'saggital')) for image, centers in zip(labels, p_vox_coord_pos)]
     
     # all negative are taken, as the GT includes only boundary voxels only
-    if seeds is None: 
-        n_vox_coord_pos = [get_mask_voxels(mask==15) for mask, p in zip(labels, p_vox_coord_pos)]        
+    if seeds is None:
+        if balance_neg == True:
+            n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]
+        else:
+            n_vox_coord_pos = [get_mask_voxels(mask==15) for mask, p in zip(labels, p_vox_coord_pos)]        
     else:
         n_vox_coord_pos = [get_mask_voxels(np.logical_and(mask==15, seed ==1),  size=len(p)) for mask, seed, p in zip(labels, seeds, p_vox_coord_pos)]
 
@@ -108,7 +111,7 @@ def get_atlas_vectors(dir_name, current_scan, centers):
     return atlas_vectors  
 
 
-def load_patches(dir_name, mask_name, t1_name, size, seeds = None):
+def load_patches(dir_name, mask_name, t1_name, size, seeds = None, balance_neg = True):
     """
     Load all patches for a given subject image passed as argument. This function makes no sense when using only
     one channel, but it's useful when using more than one, as load_patch_vectors is called for each of the channels and 
@@ -137,7 +140,13 @@ def load_patches(dir_name, mask_name, t1_name, size, seeds = None):
 
 
     print 'Loading ' + t1_name + ' images'
-    x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names = load_patch_vectors(t1_name, mask_name, dir_name, size, random_state, seeds)
+    x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names = load_patch_vectors(t1_name,
+                                                                                         mask_name,
+                                                                                         dir_name,
+                                                                                         size,
+                                                                                         random_state,
+                                                                                         seeds,
+                                                                                         balance_neg)
 
     #print 'Creating data vector'
     #data = [images for images in [t1] if images is not None]
