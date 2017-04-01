@@ -320,6 +320,7 @@ def test_all_scans(subject_names, options):
             #positive_samples = filtered_mask > 0
 
                 
+
 def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, options, centers = None, randomize = True, k_fold = 1):
     """
     Generate training features X an Y for each image modality. Remove the current scan "i" and build the training 
@@ -371,12 +372,34 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     
 
     if options['data_augmentation']:
+        
+        # balance positive classes
+        # compute the frequency of each of the classes to obtain the class with less samples
+
+
+
+        h, f = np.histogram(y_train, bins = 15)
+        min_class = np.argmin(h)
+        min_element = np.min(h)
+        print "--------------------------------------------------"
+        print "DATA DISTRIBUTION before DA"
+        print "--------------------------------------------------"
+        max_element = h[1]
+        for c in range(15): print "CLASS: ", c, h[c], max_element / h[c]
+        
         x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = data_augmentation(x_train_axial,
-                                                                             x_train_cor,
-                                                                             x_train_sag,
-                                                                             train_atlas,
-                                                                             y_train,
-                                                                             options)
+                                                                                          x_train_cor,
+                                                                                          x_train_sag,
+                                                                                          train_atlas,
+                                                                                          y_train, options)
+        h, f = np.histogram(y_train, bins = 15)
+        min_class = np.argmin(h)
+        min_element = np.min(h)
+        print "--------------------------------------------------"
+        print "DATA DISTRIBUTION before DA"
+        print "--------------------------------------------------"        
+        max_element = h[1]
+        for c in range(15): print "CLASS: ", c, h[c], max_element / h[c]
 
     if randomize:
         seed = np.random.randint(np.iinfo(np.int32).max)
@@ -439,32 +462,32 @@ def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     """
     
     # classes used for data augmentation 
-    classes = options['classes']
-    class_size = options['class_size']
+    classes = options['class_weights'].keys()
+    class_size = options['class_weights'].values()
     
     # augment the number of elements for each of the selected classes. The number of elements for each clas
     # is controled by class size
-    x_axial_ = np.concatenate([np.array([x_axial[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
-    x_cor_ = np.concatenate([np.array([x_cor[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
-    x_sag_ = np.concatenate([np.array([x_sag[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
-    y_da = np.concatenate([np.array([y[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
-    atlas_da = np.concatenate([np.array([atlas[y == c] for i in range(s)]) for c,s in zip(classes, class_size)], axis = 0)
+    x_axial_ = np.concatenate([np.concatenate([x_axial[y == c] for i in range(s)], axis = 0) for c,s in zip(classes, class_size)], axis = 0)
+    x_cor_ = np.concatenate([np.concatenate([x_cor[y == c] for i in range(s)], axis = 0) for c,s in zip(classes, class_size)], axis = 0)
+    x_sag_ = np.concatenate([np.concatenate([x_sag[y == c] for i in range(s)], axis = 0) for c,s in zip(classes, class_size)], axis = 0)
+    y_da = np.concatenate([np.concatenate([y[y == c] for i in range(s)], axis = 0) for c,s in zip(classes, class_size)], axis = 0)
+    a_da = np.concatenate([np.concatenate([atlas[y == c] for i in range(s)], axis = 0) for c,s in zip(classes, class_size)], axis = 0)
 
-        '''
-        # extract patches for augmenting
-        xa_ = np.concatenate([x_axial[y == c] for c in classes], axis = 0)
-        xc_ = np.concatenate([x_cor[y == c] for c in classes], axis = 0)
-        xs_ = np.concatenate([x_sag[y == c] for c in classes], axis = 0)
-        yy_ = np.concatenate([y[y == c] for c in classes], axis = 0)
-        aa_ = np.concatenate([atlas[y == c] for c in classes], axis = 0)
-        da_size = options['class_size']
-        # expand classes
-        x_axial_ = np.concatenate([xa_ for i in range(da_size)], axis = 0)
-        x_cor_ = np.concatenate([xc_ for i in range(da_size)], axis = 0)
-        x_sag_ = np.concatenate([xs_ for i in range(da_size)], axis = 0)
-        y_da = np.concatenate([yy_ for i in range(da_size)], axis = 0)
-        a_da = np.concatenate([aa_ for i in range(da_size)], axis = 0)
-        '''
+    '''
+    # extract patches for augmenting
+    xa_ = np.concatenate([x_axial[y == c] for c in classes], axis = 0)
+    xc_ = np.concatenate([x_cor[y == c] for c in classes], axis = 0)
+    xs_ = np.concatenate([x_sag[y == c] for c in classes], axis = 0)
+    yy_ = np.concatenate([y[y == c] for c in classes], axis = 0)
+    aa_ = np.concatenate([atlas[y == c] for c in classes], axis = 0)
+    da_size = options['class_size']
+    # expand classes
+    x_axial_ = np.concatenate([xa_ for i in range(da_size)], axis = 0)
+    x_cor_ = np.concatenate([xc_ for i in range(da_size)], axis = 0)
+    x_sag_ = np.concatenate([xs_ for i in range(da_size)], axis = 0)
+    y_da = np.concatenate([yy_ for i in range(da_size)], axis = 0)
+    a_da = np.concatenate([aa_ for i in range(da_size)], axis = 0)
+    '''
 
     num_samples = x_axial_.shape[0]
     random_angles = np.random.randint(size = num_samples, low = -options['max_angle'], high = options['max_angle'])
