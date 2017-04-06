@@ -96,9 +96,9 @@ def get_atlas_vectors(dir_name, current_scan, centers):
     subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
     
     atlas_names =  [os.path.join(dir_name, subject, 'mni_atlas', 'MNI_sub_prob_def.nii.gz') for subject in subjects]
-    #atlas_names =  [os.path.join(dir_name, subject, 'build_atlas15', 'prior_atlas_4D_train_15_classes_' + current_scan + '.nii.gz') for subject in subjects]
+    #atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
+    #atlas_names =  [os.path.join(dir_name, subject, 'CONV_135_135', subject + '_level_0_proba.nii.gz') for subject in subjects]
     atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
-
     # convert lesion centers
     lc = map(lambda l: np.asarray(l), centers)
     atlas_vectors = [a[c[:,0], c[:,1], c[:,2]] for a, c in zip(atlas_images, lc)]
@@ -276,6 +276,7 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
 
     #atlas_name = os.path.join(dir_name, current_scan, 'build_atlas15', 'prior_atlas_4D_train_15_classes_' + current_scan + '.nii.gz')
     atlas_name = os.path.join(dir_name, current_scan, 'mni_atlas', 'MNI_sub_prob_def.nii.gz')
+    #atlas_name = os.path.join(dir_name, current_scan, 'CONV_135_135', current_scan + '_level_0_proba.nii.gz')
     atlas_image =  load_nii(atlas_name).get_data()
 
     for i in range(0, len(lesion_centers), batch_size):
