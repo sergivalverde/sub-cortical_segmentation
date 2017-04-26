@@ -409,13 +409,12 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
 
     y_train[y_train==15] = 0
 
-    atlas, atlas_2 = get_atlas_vectors(training_folder, current_scan, centers)
+    atlas = get_atlas_vectors(training_folder, current_scan, centers)
     train_atlas = np.concatenate(atlas[:index] + atlas[index+k_fold:]).astype('float32')
-    train_atlas_2 = np.concatenate(atlas_2[:index] + atlas_2[index+k_fold:]).astype('float32')
+
 
     # plot class frequencies
     
-
     if options['data_augmentation']:
         
         # balance positive classes
@@ -493,7 +492,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     #print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
     #print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
     
-    return x_train_axial, x_train_cor, x_train_sag, train_atlas, train_atlas_2, y_train
+    return x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train
 
 def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     """
