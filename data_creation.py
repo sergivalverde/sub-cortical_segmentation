@@ -10,7 +10,7 @@ import cPickle
 import copy
 from operator import add
 nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
-
+import time 
 
 
 def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds = None, balance_neg = True, datatype=np.float32):
@@ -87,6 +87,24 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, vox_positions, image_names
 
 
+def compute_neighbors(atlas_images, centers, radius = 1):
+    """
+    compute probabilities for each of the voxels
+    TO DOC
+    """
+    
+    t = time.time()
+    size = [(radius*2)+1, (radius*2)+1]
+
+    out = []
+
+    all_patches = [np.stack([np.array(get_patches(patches[:,:,:,c], center, size, mode = 'axial')) for c in range(15)], axis = 1) for patches, center in zip(atlas_images, centers)]
+    mean_patches = [np.mean(im.reshape([im.shape[0], im.shape[1], im.shape[2]*im.shape[3]]), axis = 2) for im in all_patches]
+    print "DEBUGING NEIGHBORS:", len(mean_patches), mean_patches[0].shape, " --> estimated time: ", time.time() -t 
+
+    return mean_patches 
+
+
 def get_atlas_vectors(dir_name, current_scan, centers):
 
     """
@@ -94,11 +112,12 @@ def get_atlas_vectors(dir_name, current_scan, centers):
     """
 
     subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
-    
     atlas_names =  [os.path.join(dir_name, subject, 'mni_atlas', 'MNI_sub_prob_def.nii.gz') for subject in subjects]
+    atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
     #atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
     #atlas_names =  [os.path.join(dir_name, subject, 'CONV_135_135', subject + '_level_0_proba.nii.gz') for subject in subjects]
-    atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
+    
+    # ATLAS probabilities (centered voxel)
     # convert lesion centers
     lc = map(lambda l: np.asarray(l), centers)
     atlas_vectors = [a[c[:,0], c[:,1], c[:,2]] for a, c in zip(atlas_images, lc)]
@@ -108,7 +127,16 @@ def get_atlas_vectors(dir_name, current_scan, centers):
         if np.sum(atlas_vectors[index]) == 0:
             atlas_vectors[v][14] = 1
 
-    return atlas_vectors  
+    #  NEIGHBORS (1st class)
+    # compute first level neighbors probability for each class
+    #neigh_probabilities = compute_neighbors(atlas_images, centers, radius = 1)
+    #neigh_probabilities_2 = compute_neighbors(atlas_images, centers, radius = 2)
+
+    # merge both
+    #out_prob = [np.concatenate([p1, p2], axis = 1) for p1, p2 in zip(atlas_vectors, neigh_probabilities)]
+    #out_prob = [np.concatenate([p1, p2, p3], axis = 1) for p1, p2, p3 in zip(atlas_vectors, neigh_probabilities, neigh_probabilities_2)] 
+    #print "DEBUGING NEIGHBORS:", len(out_prob), out_prob[0].shape
+    return atlas_vectors 
 
 
 def load_patches(dir_name, mask_name, t1_name, size, seeds = None, balance_neg = True):
@@ -285,6 +313,8 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
         axial_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'axial')).astype(datatype)],axis=1)
         coronal_patches = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'coronal')).astype(datatype)], axis=1)
         saggital_patches  = np.stack([np.array(get_patches(image_norm, centers, patch_size, mode= 'saggital')).astype(datatype)], axis = 1)
+
+        # ATLAS probabilities
         cl = map(lambda l: np.asarray(l), centers)
         atlas_vector = np.stack([atlas_image[c[0],c[1],c[2]] for c in cl]).astype(dtype=np.float32)
 
@@ -293,8 +323,25 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
             if np.sum(atlas_vector[index]) == 0:
                 atlas_vector[index,14] = 1
 
+                
+        # NEIGHBORS (first level)
+        #size = [3,3]
+        #all_patches = np.stack([get_patches(atlas_image[:,:,:,c], centers, size, mode = 'axial') for c in range(15)], axis = 1)        
+        #mean_patches = np.mean(all_patches.reshape([all_patches.shape[0], all_patches.shape[1], all_patches.shape[2]*all_patches.shape[3]]), axis = 2)
+
+        # NEIGHBORS (second level)
+        # size = [5,5]
+        # all_patches = np.stack([get_patches(atlas_image[:,:,:,c], centers, size, mode = 'axial') for c in range(15)], axis = 1)        
+        # mean_patches_2 = np.mean(all_patches.reshape([all_patches.shape[0], all_patches.shape[1], all_patches.shape[2]*all_patches.shape[3]]), axis = 2)
+
+
+        # out_prob = np.stack([np.concatenate([p1, p2, p3], axis = 0) for p1, p2, p3  in zip(atlas_vector, mean_patches, mean_patches_2)], axis = 0)
+
+               
         yield axial_patches, coronal_patches, saggital_patches, atlas_vector, centers
 
         
 
 
+        
+        

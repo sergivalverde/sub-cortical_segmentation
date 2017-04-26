@@ -8,15 +8,14 @@ from scipy import ndimage
 import scipy.io as io
 from data_creation import load_patches, load_only_names, load_patch_batch, get_atlas_vectors
 from nets import build_model
-from skimage.transform import SimilarityTransform, warp, AffineTransform, rotate 
-nib.Nifti1Header.quaternion_threshold = -np.finfo(np.float32).eps * 10
+from skimage.transform import SimilarityTransform, warp, AffineTransform, rotate
 
 
 def load_data(options):
     """
     Extact data from all images.  For all database image, patches from each image view (axial, coronal and saggital) are computed.
     This function is used to reduce the loading time in leave-one-out. So, data is only loaded one time and then training feature vectors
-    for the classification of each image (leave-one-out or others) are computed. 
+    for the classification of eac image (leave-one-out or others) are computed. 
 
     Input: 
     - options:
@@ -79,10 +78,13 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
         levels are performed
         options['k-fold'] controls the k-fold validation ratio.
     '''
+
+    
     
     k = options['k-fold']
     for i in range(0,len(subject_names),k):
 
+        
         # organize experiments
         current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
         print "\n--------------------------------------------------"
@@ -146,7 +148,30 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 for it in range(iterations):
 
                     # load training data for the current scan
+                    
                     x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
+
+                    # smooth sampling 
+                    if options['resample_perc'] < 1 and it > 0:
+                        num_samples = x_train_axial.shape[0]
+                        th = int(np.round(num_samples * options['resample_perc']))
+                        x_train_axial[th:] = x_train_axial_o[th:]
+                        x_train_cor[th:] = x_train_cor_o[th:]
+                        x_train_sag[th:] = x_train_sag_o[th:]
+                        y_train[th:] = y_train_o[th:]
+                        train_atlas[th:] = train_atlas_o[th:]
+                        
+                        seed = np.random.randint(np.iinfo(np.int32).max)
+                        np.random.seed(seed)
+                        x_train_axial = np.random.permutation(x_train_axial)
+                        np.random.seed(seed)
+                        x_train_cor = np.random.permutation(x_train_cor)
+                        np.random.seed(seed)
+                        x_train_sag = np.random.permutation(x_train_sag)
+                        np.random.seed(seed)
+                        y_train = np.random.permutation(y_train)
+                        np.random.seed(seed)
+                        train_atlas = np.random.permutation(train_atlas)
 
                     if it == 0:                
                         print "\n--------------------------------------------------"
@@ -160,6 +185,16 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     
                     # fit the classifier. save weights when finished
                     net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
+
+
+                    x_train_axial_o = np.copy(x_train_axial)
+                    x_train_cor_o = np.copy(x_train_cor)
+                    x_train_sag_o = np.copy(x_train_sag)
+                    y_train_o = np.copy(y_train)
+                    train_atlas_o = np.copy(train_atlas)
+
+                    
+
             else:
                 x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
             
@@ -172,6 +207,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 print "--------------------------------------------------\n"
                 # fit the model 
                 net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
+                # net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
 
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
@@ -237,6 +273,7 @@ def test_all_scans(subject_names, options):
 
         current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
         print "--- testing on subject :", current_scan, '---------'
+
         
         experiment = options['experiment']
         if options['organize_experiments']:
@@ -252,6 +289,8 @@ def test_all_scans(subject_names, options):
             if not os.path.exists(os.path.join(exp_folder,'.train')):
                 os.mkdir(os.path.join(exp_folder,'train'))
 
+        if os.path.exists(os.path.join(exp_folder, current_scan + '_filt_level_' + str(1) + '.nii.gz')):
+            continue
         # itereate between iterations
 
         positive_samples = None
@@ -276,8 +315,13 @@ def test_all_scans(subject_names, options):
                                                                                               current_scan = current_scan):
 
                 print current_scan, batch_axial.shape
+
                 # predict classes
-                y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                y_pred = net.predict({'in1': batch_axial,
+                                      'in2': batch_cor,
+                                      'in3': batch_sag,
+                                      'in4': atlas})
+                
                 #y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                 [x, y, z] = np.stack(centers, axis=1)
                 image[x, y, z] = y_pred
@@ -365,8 +409,9 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
 
     y_train[y_train==15] = 0
 
-    atlas = get_atlas_vectors(training_folder, current_scan, centers)
+    atlas, atlas_2 = get_atlas_vectors(training_folder, current_scan, centers)
     train_atlas = np.concatenate(atlas[:index] + atlas[index+k_fold:]).astype('float32')
+    train_atlas_2 = np.concatenate(atlas_2[:index] + atlas_2[index+k_fold:]).astype('float32')
 
     # plot class frequencies
     
@@ -448,8 +493,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     #print "Y_TRAIN POS: ", y_train[y_train > 0].shape[0]
     #print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
     
-    return x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train
-
+    return x_train_axial, x_train_cor, x_train_sag, train_atlas, train_atlas_2, y_train
 
 def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     """
