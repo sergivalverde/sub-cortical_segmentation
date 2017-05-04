@@ -151,27 +151,17 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     
                     x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
 
-                    # smooth sampling 
-                    if options['resample_perc'] < 1 and it > 0:
-                        num_samples = x_train_axial.shape[0]
-                        th = int(np.round(num_samples * options['resample_perc']))
-                        x_train_axial[th:] = x_train_axial_o[th:]
-                        x_train_cor[th:] = x_train_cor_o[th:]
-                        x_train_sag[th:] = x_train_sag_o[th:]
-                        y_train[th:] = y_train_o[th:]
-                        train_atlas[th:] = train_atlas_o[th:]
-                        
-                        seed = np.random.randint(np.iinfo(np.int32).max)
-                        np.random.seed(seed)
-                        x_train_axial = np.random.permutation(x_train_axial)
-                        np.random.seed(seed)
-                        x_train_cor = np.random.permutation(x_train_cor)
-                        np.random.seed(seed)
-                        x_train_sag = np.random.permutation(x_train_sag)
-                        np.random.seed(seed)
-                        y_train = np.random.permutation(y_train)
-                        np.random.seed(seed)
-                        train_atlas = np.random.permutation(train_atlas)
+                    seed = np.random.randint(np.iinfo(np.int32).max)
+                    np.random.seed(seed)
+                    x_train_axial = np.random.permutation(x_train_axial)
+                    np.random.seed(seed)
+                    x_train_cor = np.random.permutation(x_train_cor)
+                    np.random.seed(seed)
+                    x_train_sag = np.random.permutation(x_train_sag)
+                    np.random.seed(seed)
+                    y_train = np.random.permutation(y_train)
+                    np.random.seed(seed)
+                    train_atlas = np.random.permutation(train_atlas)
 
                     if it == 0:                
                         print "\n--------------------------------------------------"
@@ -187,14 +177,6 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
 
 
-                    x_train_axial_o = np.copy(x_train_axial)
-                    x_train_cor_o = np.copy(x_train_cor)
-                    x_train_sag_o = np.copy(x_train_sag)
-                    y_train_o = np.copy(y_train)
-                    train_atlas_o = np.copy(train_atlas)
-
-                    
-
             else:
                 x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
             
@@ -207,8 +189,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 print "--------------------------------------------------\n"
                 # fit the model 
                 net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
-                # net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
-
+                
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
 
@@ -229,7 +210,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     [x, y, z] = np.stack(centers, axis=1)
                     image[x, y, z] = y_pred
 
-            # save segmentation masks for debugging in '.train'.
+                # save segmentation masks for debugging in '.train'.
                 # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
                 image_nii.get_data()[:] = image
                 image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
@@ -270,11 +251,9 @@ def test_all_scans(subject_names, options):
     for i in range(len(subject_names[0])):
 
         # organize experiments
-
         current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
         print "--- testing on subject :", current_scan, '---------'
 
-        
         experiment = options['experiment']
         if options['organize_experiments']:
             exp_folder = os.path.join(options['folder'], current_scan, experiment)
@@ -307,12 +286,12 @@ def test_all_scans(subject_names, options):
 
             image = np.zeros_like(image_nii.get_data())
             image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
-            print "debug image proba: ", image_proba.shape
             print current_scan, ': testing on --> ', test_scan, ' (level ', level , ')'
 
-            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'], tuple(options['patch_size']),
-                                                                                              dir_name = options['folder'],
-                                                                                              current_scan = current_scan):
+            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'],
+                                                                                      tuple(options['patch_size']),
+                                                                                      dir_name = options['folder'],
+                                                                                      current_scan = current_scan):
 
                 print current_scan, batch_axial.shape
 
@@ -322,7 +301,6 @@ def test_all_scans(subject_names, options):
                                       'in3': batch_sag,
                                       'in4': atlas})
                 
-                #y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
                 [x, y, z] = np.stack(centers, axis=1)
                 image[x, y, z] = y_pred
 
@@ -360,10 +338,8 @@ def test_all_scans(subject_names, options):
             image_nii.get_data()[:] = filtered_mask
             image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
-            # take positive samples from the segmentation and used as seed for the next iteration 
-            #positive_samples = filtered_mask > 0
-
-                
+        
+          
 
 def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, options, centers = None, randomize = True, k_fold = 1):
     """
@@ -420,8 +396,6 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         # balance positive classes
         # compute the frequency of each of the classes to obtain the class with less samples
 
-
-
         h, f = np.histogram(y_train, bins = 15)
         min_class = np.argmin(h)
         min_element = np.min(h)
@@ -440,7 +414,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         min_class = np.argmin(h)
         min_element = np.min(h)
         print "--------------------------------------------------"
-        print "DATA DISTRIBUTION before DA"
+        print "DATA DISTRIBUTION after DA"
         print "--------------------------------------------------"        
         max_element = h[1]
         for c in range(15): print "CLASS: ", c, h[c], max_element / h[c]

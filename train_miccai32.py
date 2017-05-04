@@ -43,17 +43,13 @@ options['k-fold'] = 1
 
 # dataset 
 options['use_t1'] = True
-options['t1'] = 'T1.nii.gz'
-#options['mask'] = 'gt_15_classes_border2.nii.gz'
+options['t1'] = 'T1_n4.nii.gz'
 options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
 options['out_probabilities'] = False
 
 
 # - CNN training batch size
-#options['patch_size'] = [11,11]
-#options['patch_size'] = [25,25]
-#options['patch_size'] = [32,32]
 options['patch_size'] = [args.ps, args.ps]
 options['num_channels'] = 1
 options['weights_name'] = [experiment + '_1.pkl', experiment + '_2.pkl']
@@ -86,15 +82,12 @@ options['da_flip'] = False
 if __name__ == '__main__':
     if options['training'] is True:
         # load feature data and perform leave-one-out training
-        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/training_set'
-        #options['folder'] = '/mnt/DATA/w/CNN_CORT/images/M12/training'
-        #options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/train_tests'
+        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/train'
         x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names = load_data(options)
         k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)
     else:
         # if training is disabled, test all the images of the dataset using existing weights, assuming that those exits
-        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/test_set'
-        #options['folder'] = '/mnt/DATA/w/CNN_CORT/images/M12/testing'
+        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/test'
         subject_names = load_names(options)
         test_all_scans(subject_names, options)
 
