@@ -146,3 +146,4 @@ def build_model(subject_path, options, level = 0):
             train_split=TrainSplit(eval_size= train_split_perc),
         )
 
+    return net 

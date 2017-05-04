@@ -43,7 +43,7 @@ options['k-fold'] = 1
 
 # dataset 
 options['use_t1'] = True
-options['t1'] = 'T1.nii.gz'
+options['t1'] = 'T1_n4.nii.gz'
 options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
 options['out_probabilities'] = False
@@ -64,7 +64,7 @@ options['epochs_by_sample'] = 1
 options['train_split'] = 0.25
 options['test_batch_size'] = 50000
 options['load_weights'] = True
-options['testing'] = False
+options['testing'] = True 
 options['levels'] = 1
 
 # DA options (experimental)
@@ -82,12 +82,12 @@ options['da_flip'] = False
 if __name__ == '__main__':
     if options['training'] is True:
         # load feature data and perform leave-one-out training
-        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/train'
+        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/IBSR18/paper'
         x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names = load_data(options)
         k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)
     else:
         # if training is disabled, test all the images of the dataset using existing weights, assuming that those exits
-        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/MICCAI2012/test'
+        options['folder'] = '/mnt/DATA/w/CNN_CORT/images/IBSR18/paper'
         subject_names = load_names(options)
         test_all_scans(subject_names, options)
 

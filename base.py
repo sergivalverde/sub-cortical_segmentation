@@ -197,7 +197,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 # test the scan not used for training
                 image_nii = load_nii(subject_names[i])
                 image = np.zeros_like(image_nii.get_data())
-            
+                image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
                 print current_scan, ': testing on --> ', current_scan
                 
                 for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i],
@@ -210,11 +210,19 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     [x, y, z] = np.stack(centers, axis=1)
                     image[x, y, z] = y_pred
 
+
+                    if options['out_probabilities']:
+                        # predict probabilities 
+                        y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                        for c in range(15):
+                            image_proba[x, y, z, c] = y_pred_proba[:,c]
+
+
                 # save segmentation masks for debugging in '.train'.
                 # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
                 image_nii.get_data()[:] = image
                 image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
-
+      
                 # filter-out fp by taking only the higher area.
                 # iterate for each of the classes
                 filtered_mask = np.zeros_like(image)
@@ -237,6 +245,10 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
 
                 image_nii.get_data()[:] = filtered_mask
                 image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
+                if options['out_probabilities']:
+                    image_out = nib.Nifti1Image(image_proba, np.eye(4))
+                    image_out.to_filename(os.path.join(exp_folder,  current_scan + '_level_' + str(level) + '_proba.nii.gz'))
 
             
 def test_all_scans(subject_names, options):
