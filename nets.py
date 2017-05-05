@@ -146,4 +146,92 @@ def build_model(subject_path, options, level = 0):
             train_split=TrainSplit(eval_size= train_split_perc),
         )
 
+
+    if (options['experiment'] == 'CONV_120_375_135_135') or (options['experiment'] == 'CONV_120_375_135_135_N4'):
+    
+        fc_conv = 120
+        fc_fc = fc_conv + 15
+        dropout_conv = 0.4
+        dropout_fc = 0.4
+        # --------------------------------------------------
+        # channel_1: axial
+        # --------------------------------------------------
+        # input: 32
+        
+        axial_ch = InputLayer(name='in1', shape=(None, num_channels, ps, ps))
+        axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv1', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu1')
+        axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv2', num_filters=20, filter_size=3)),  name = 'axial_ch_prelu2')
+        axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_1', pool_size=2)
+        axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv3', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu3')
+        axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv4', num_filters=40, filter_size=3)),  name = 'axial_ch_prelu4')
+        axial_ch = MaxPool2DDNNLayer(axial_ch, name='axial_max_pool_2', pool_size=2)
+        axial_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(axial_ch, name='axial_ch_conv5', num_filters=60, filter_size=3)),  name = 'axial_ch_prelu5')
+        axial_ch = DenseLayer(axial_ch, name='axial_d1', num_units = fc_conv)
+        axial_ch = prelu(axial_ch, name = 'axial_prelu_d1')
+        axial_ch = DropoutLayer(axial_ch, name = 'axial_l1drop', p = dropout_conv)
+
+        # --------------------------------------------------
+        # channel_1: coronal
+        # --------------------------------------------------
+        # input: 32
+        coronal_ch = InputLayer(name='in2', shape=(None, num_channels, ps, ps))
+        coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv1', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu1')
+        coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv2', num_filters=20, filter_size=3)),  name = 'coronal_ch_prelu2')
+        coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_1', pool_size=2)
+        coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv3', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu3')
+        coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv4', num_filters=40, filter_size=3)),  name = 'coronal_ch_prelu4')
+        coronal_ch = MaxPool2DDNNLayer(coronal_ch, name='coronal_max_pool_2', pool_size=2)
+        coronal_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(coronal_ch, name='coronal_ch_conv5', num_filters=60, filter_size=3)),  name = 'coronal_ch_prelu5')
+        coronal_ch = DenseLayer(coronal_ch, name='coronal_d1', num_units = fc_conv)
+        coronal_ch = prelu(coronal_ch, name = 'coronal_prelu_d1')
+        coronal_ch = DropoutLayer(coronal_ch, name = 'coronal_l1drop', p = dropout_conv)
+
+        # --------------------------------------------------
+        # channel_1: saggital
+        # --------------------------------------------------
+        #input: 32
+        saggital_ch = InputLayer(name='in3', shape=(None, num_channels, ps, ps))
+        saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv1', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu1')
+        saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv2', num_filters=20, filter_size=3)),  name = 'saggital_ch_prelu2')
+        saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_1', pool_size=2)
+        saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv3', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu3')
+        saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv4', num_filters=40, filter_size=3)),  name = 'saggital_ch_prelu4')
+        saggital_ch = MaxPool2DDNNLayer(saggital_ch, name='saggital_max_pool_2', pool_size=2)
+        saggital_ch = prelu(batch_norm_dnn(Conv2DDNNLayer(saggital_ch, name='saggital_ch_conv5', num_filters=60, filter_size=3)),  name = 'saggital_ch_prelu5')
+        saggital_ch = DenseLayer(saggital_ch, name='saggital_d1', num_units = fc_conv)
+        saggital_ch = prelu(saggital_ch, name = 'saggital_prelu_d1')
+        saggital_ch = DropoutLayer(saggital_ch, name = 'saggital_l1drop', p = dropout_conv)
+
+        # concatenate channels
+        atlas_layer = InputLayer(name='in4', shape=(None, 15))
+        layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch, atlas_layer])
+
+        # fully connected layer
+        layer = DenseLayer(layer, name='fc_2', num_units = fc_fc)
+        layer = prelu(layer, name = 'prelu_f2')
+        layer = DropoutLayer(layer, name = 'f2_drop', p = dropout_fc)
+
+        # fully connected layer 
+        layer = DenseLayer(layer, name='fc_3', num_units = fc_fc)
+        layer = prelu(layer, name = 'prelu_f3')
+        layer = DropoutLayer(layer, name = 'f3_drop', p = dropout_fc)
+
+        # softmax
+        net_layer = DenseLayer(layer, name='out_layer', num_units = 15, nonlinearity=softmax)
+
+        net =  NeuralNet(
+            layers= net_layer,
+            objective_loss_function=objectives.categorical_crossentropy,
+            update = updates.adadelta,
+            on_epoch_finished=[
+                save_weights,
+                save_training_history,
+                early_stopping,
+            ],
+            verbose= t_verbose,
+            max_epochs= num_epochs,
+            train_split=TrainSplit(eval_size= train_split_perc),
+        )
+
+        
     return net 

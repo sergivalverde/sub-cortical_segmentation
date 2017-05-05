@@ -8,7 +8,8 @@ parser.add_argument('--experiment', type=str)
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--da', action='store_true', default=False)
 parser.add_argument('--re', action='store_true', default=False)
-parser.add_argument('--ps', type=int)
+parser.add_argument('--bf', action='store_true', default=False)
+parser.add_argument('--ps', type=int, default = 32)
 args = parser.parse_args()
 
 
@@ -36,6 +37,9 @@ if args.da:
 if args.re:
     experiment = experiment + '_RE'
 
+if args.bf:
+    experiment = experiment + '_N4'
+    
 print experiment 
 options['experiment'] = experiment
 options['organize_experiments'] = True
@@ -43,7 +47,11 @@ options['k-fold'] = 1
 
 # dataset 
 options['use_t1'] = True
-options['t1'] = 'T1.nii.gz'
+if args.bf:
+    options['t1'] = 'T1_n4.nii.gz'
+else:
+    options['t1'] = 'T1.nii.gz'
+
 options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
 options['out_probabilities'] = False
