@@ -55,8 +55,8 @@ if args.bf:
 else:
     options['t1'] = 'T1.nii.gz'
 
-#options['mask'] = 'gt_15_classes_border6.nii.gz'
-options['mask'] = 'gt_15_classes.nii.gz'
+options['mask'] = 'gt_all_subcortical.nii.gz'
+#options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
 options['out_probabilities'] = False
 # - CNN training batch size

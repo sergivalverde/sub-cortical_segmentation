@@ -32,13 +32,13 @@ def load_data(options):
       - centers: a list of voxel coordinates for each of the extracted patches for each of the database subjects. 
       - image names 
     """
-    
     (x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names) = load_patches(dir_name=options['folder'],
                                                                                   t1_name=options['t1'],
                                                                                   mask_name=options['mask'],
                                                                                   size=tuple(options['patch_size']),
                                                                                   balance_neg = options['balance_neg'])
     return x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, names
+
 
 
 def load_names(options):
@@ -79,8 +79,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
         options['k-fold'] controls the k-fold validation ratio.
     '''
 
-    
-    
+        
     k = options['k-fold']
     for i in range(0,len(subject_names),k):
 
@@ -135,7 +134,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
 
             print current_scan + ' Build the model'
             net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
-
+  
             if options['load_weights'] == True:
                 try:
                     net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
@@ -151,17 +150,18 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     
                     x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
 
-                    seed = np.random.randint(np.iinfo(np.int32).max)
-                    np.random.seed(seed)
-                    x_train_axial = np.random.permutation(x_train_axial)
-                    np.random.seed(seed)
-                    x_train_cor = np.random.permutation(x_train_cor)
-                    np.random.seed(seed)
-                    x_train_sag = np.random.permutation(x_train_sag)
-                    np.random.seed(seed)
-                    y_train = np.random.permutation(y_train)
-                    np.random.seed(seed)
-                    train_atlas = np.random.permutation(train_atlas)
+                    
+                    #seed = np.random.randint(np.iinfo(np.int32).max)
+                    #np.random.seed(seed)
+                    #x_train_axial = np.random.permutation(x_train_axial)
+                    #np.random.seed(seed)
+                    #x_train_cor = np.random.permutation(x_train_cor)
+                    #np.random.seed(seed)
+                    #x_train_sag = np.random.permutation(x_train_sag)
+                    #np.random.seed(seed)
+                    #y_train = np.random.permutation(y_train)
+                    #np.random.seed(seed)
+                    #train_atlas = np.random.permutation(train_atlas)
 
                     if it == 0:                
                         print "\n--------------------------------------------------"
@@ -187,7 +187,11 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
                 print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
                 print "--------------------------------------------------\n"
-                # fit the model 
+                # fit the model
+
+                if options['tf']:
+                    net = define_training_layers(net)
+        
                 net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag, 'in4': train_atlas}, y_train)
                 
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
@@ -221,7 +225,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                 # save segmentation masks for debugging in '.train'.
                 # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
                 image_nii.get_data()[:] = image
-                image_nii.to_filename(os.path.join(exp_folder, test_scan + '_level_' + str(level) + '.nii.gz'))
+                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_level_' + str(level) + '.nii.gz'))
       
                 # filter-out fp by taking only the higher area.
                 # iterate for each of the classes
@@ -244,7 +248,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
                     filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
 
                 image_nii.get_data()[:] = filtered_mask
-                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
+                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_da_' + str(level) + '.nii.gz'))
 
                 if options['out_probabilities']:
                     image_out = nib.Nifti1Image(image_proba, np.eye(4))
@@ -292,18 +296,20 @@ def test_all_scans(subject_names, options):
             # build the network model for the particular image 
             # load previous weights for testing
 
-            net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
-            net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
-            net.load_params_from(net_weights)
-
+            if i == 0:
+                net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
+                net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+                net.load_params_from(net_weights)
+                
             image = np.zeros_like(image_nii.get_data())
-            image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
+            image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15]).astype('float32')
             print current_scan, ': testing on --> ', test_scan, ' (level ', level , ')'
 
             for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'],
                                                                                       tuple(options['patch_size']),
                                                                                       dir_name = options['folder'],
-                                                                                      current_scan = current_scan):
+                                                                                      current_scan = current_scan,
+                                                                                      crop = options['crop']):
 
                 print current_scan, batch_axial.shape
 
@@ -322,36 +328,37 @@ def test_all_scans(subject_names, options):
                     for c in range(15):
                         image_proba[x, y, z, c] = y_pred_proba[:,c]
 
-            # save segmentations 
-            image_nii.get_data()[:] = image
-            image_nii.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '.nii.gz'))
+            # save segmentations
+            seg_out = nib.Nifti1Image(image, affine = image_nii.affine)
+            seg_out.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '.nii.gz'))
             if options['out_probabilities']:
-                image_out = nib.Nifti1Image(image_proba, np.eye(4))
-                image_out.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '_proba.nii.gz'))
+                
+                seg_out_prob = nib.Nifti1Image(image_proba, affine = image_nii.affine)
+                seg_out_prob.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '_proba.nii.gz'))
 
-            # filter-out fp by taking only the higher area.
-            # iterate for each of the classes
-            filtered_mask = np.zeros_like(image)            
-            atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
-            for l in range(1,15):
-                print "     processing label ", l
-                th_label = image == l
-                labels, num_labels = ndimage.label(th_label)
-                label_list = np.unique(labels)
-                # filter candidates by size. Only storing the biggest one
-
-                num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
-                argmax = np.argmax(num_elements_by_lesion)
-
-                # assign voxels to output
-                current_voxels = np.stack(np.where(labels == argmax), axis =1)
-                filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+            if options['filtering_out']:
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(image)            
+                atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = image == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
+                    
+                    num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
+                    
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
     
-            image_nii.get_data()[:] = filtered_mask
-            image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+                image_nii.get_data()[:] = filtered_mask
+                image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
-        
-          
+                  
 
 def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, options, centers = None, randomize = True, k_fold = 1):
     """
@@ -382,15 +389,12 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
 
     # control the number of samples used for training 
 
-    # generate a training set by leaving out the scan used for training 
+    # generate a training set by leaving out the scan used for training
     x_train_axial = np.concatenate(x_axial[:index] + x_axial[index+k_fold:], axis = 0).astype('float32')
     x_train_cor =   np.concatenate(x_coronal[:index] + x_coronal[index+k_fold:], axis = 0).astype('float32')
     x_train_sag =   np.concatenate(x_saggital[:index] + x_saggital[index+k_fold:], axis = 0).astype('float32')
-
-    
-    # using voxelwise segmentation. so only one segmentation is needed.
     y_train = np.concatenate(y[:index] + y[index+k_fold:]).astype('uint8')
-
+    
     # voxelwise:  convert labels to one-dimensional vector
     y_train = y_train[:, y_train.shape[1] / 2, y_train.shape[2] / 2]
     y_train = np.squeeze(y_train)
@@ -431,6 +435,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         max_element = h[1]
         for c in range(15): print "CLASS: ", c, h[c], max_element / h[c]
 
+    
     if randomize:
         seed = np.random.randint(np.iinfo(np.int32).max)
         np.random.seed(seed)
@@ -444,9 +449,23 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         np.random.seed(seed)
         train_atlas = np.random.permutation(train_atlas)
     
-            
+
+
+        
     if options['re-sampling']:
 
+        num_pos_samples = np.sum(y_train > 0)
+        y_indices_neg = np.where(y_train == 0)[0][:num_pos_samples]
+        y_indices_pos = np.where(y_train > 0)[0]
+        y_indices = np.random.permutation(np.concatenate([y_indices_neg, y_indices_pos], axis = 0))
+
+        y_train = y_train[y_indices]
+        x_train_axial = x_train_axial[y_indices]
+        x_train_cor = x_train_cor[y_indices]
+        x_train_sag = x_train_sag[y_indices]
+        train_atlas = train_atlas[y_indices]
+        
+        '''
         # balance positive classes
         # compute the frequency of each of the classes to obtain the class with less samples
         h, f = np.histogram(y_train, bins = 15)
@@ -466,7 +485,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
         x_train_cor = x_train_cor[y_indices]
         x_train_sag = x_train_sag[y_indices]
         train_atlas = train_atlas[y_indices]
-
+        '''
 
     # The net expects training data with shape [samples, channels, p1, p2]
     # reshape arrays for single channel
@@ -479,6 +498,7 @@ def generate_training_set(training_folder, current_scan, index, x_axial, x_coron
     #print "Y_TRAIN NEG: ", y_train[y_train == 0].shape[0]
     
     return x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train
+
 
 def data_augmentation(x_axial, x_cor, x_sag, atlas, y, options):
     """
@@ -583,3 +603,249 @@ def test_2d_patches(x_axial, x_coronal, x_saggital, scan, patch_num):
     scipy.misc.imsave('saggital.png', x_saggital[scan][patch_num])
 
 
+def define_training_layers(net):
+    """
+    to doc: define the number of layers to train
+    """
+
+
+    # do not train convolutionals
+    net.initialize()
+    net.layers_['saggital_ch_conv1'].params[net.layers_['saggital_ch_conv1'].W].remove("trainable")
+    net.layers_['saggital_ch_conv2'].params[net.layers_['saggital_ch_conv2'].W].remove("trainable")
+    net.layers_['saggital_ch_conv3'].params[net.layers_['saggital_ch_conv3'].W].remove("trainable")
+    net.layers_['saggital_ch_conv4'].params[net.layers_['saggital_ch_conv4'].W].remove("trainable")
+    net.layers_['saggital_ch_conv5'].params[net.layers_['saggital_ch_conv5'].W].remove("trainable")
+    net.layers_['saggital_ch_prelu1'].params[net.layers_['saggital_ch_prelu1'].alpha].remove("trainable")
+    net.layers_['saggital_ch_prelu2'].params[net.layers_['saggital_ch_prelu2'].alpha].remove("trainable")
+    net.layers_['saggital_ch_prelu3'].params[net.layers_['saggital_ch_prelu3'].alpha].remove("trainable")
+    net.layers_['saggital_ch_prelu4'].params[net.layers_['saggital_ch_prelu4'].alpha].remove("trainable")
+    net.layers_['saggital_ch_prelu5'].params[net.layers_['saggital_ch_prelu5'].alpha].remove("trainable")
+    net.layers_['saggital_d1'].params[net.layers_['saggital_d1'].W].remove("trainable")
+    net.layers_['saggital_prelu_d1'].params[net.layers_['saggital_prelu_d1'].alpha].remove("trainable")
+
+    net.layers_['axial_ch_conv1'].params[net.layers_['axial_ch_conv1'].W].remove("trainable")
+    net.layers_['axial_ch_conv2'].params[net.layers_['axial_ch_conv2'].W].remove("trainable")
+    net.layers_['axial_ch_conv3'].params[net.layers_['axial_ch_conv3'].W].remove("trainable")
+    net.layers_['axial_ch_conv4'].params[net.layers_['axial_ch_conv4'].W].remove("trainable")
+    net.layers_['axial_ch_conv5'].params[net.layers_['axial_ch_conv5'].W].remove("trainable")
+    net.layers_['axial_ch_prelu1'].params[net.layers_['axial_ch_prelu1'].alpha].remove("trainable")
+    net.layers_['axial_ch_prelu2'].params[net.layers_['axial_ch_prelu2'].alpha].remove("trainable")
+    net.layers_['axial_ch_prelu3'].params[net.layers_['axial_ch_prelu3'].alpha].remove("trainable")
+    net.layers_['axial_ch_prelu4'].params[net.layers_['axial_ch_prelu4'].alpha].remove("trainable")
+    net.layers_['axial_ch_prelu5'].params[net.layers_['axial_ch_prelu5'].alpha].remove("trainable")
+    net.layers_['axial_d1'].params[net.layers_['axial_d1'].W].remove("trainable")
+    net.layers_['axial_prelu_d1'].params[net.layers_['axial_prelu_d1'].alpha].remove("trainable")
+
+    net.layers_['coronal_ch_conv1'].params[net.layers_['coronal_ch_conv1'].W].remove("trainable")
+    net.layers_['coronal_ch_conv2'].params[net.layers_['coronal_ch_conv2'].W].remove("trainable")
+    net.layers_['coronal_ch_conv3'].params[net.layers_['coronal_ch_conv3'].W].remove("trainable")
+    net.layers_['coronal_ch_conv4'].params[net.layers_['coronal_ch_conv4'].W].remove("trainable")
+    net.layers_['coronal_ch_conv5'].params[net.layers_['coronal_ch_conv5'].W].remove("trainable")
+    net.layers_['coronal_ch_prelu1'].params[net.layers_['coronal_ch_prelu1'].alpha].remove("trainable")
+    net.layers_['coronal_ch_prelu2'].params[net.layers_['coronal_ch_prelu2'].alpha].remove("trainable")
+    net.layers_['coronal_ch_prelu3'].params[net.layers_['coronal_ch_prelu3'].alpha].remove("trainable")
+    net.layers_['coronal_ch_prelu4'].params[net.layers_['coronal_ch_prelu4'].alpha].remove("trainable")
+    net.layers_['coronal_ch_prelu5'].params[net.layers_['coronal_ch_prelu5'].alpha].remove("trainable")
+    net.layers_['coronal_d1'].params[net.layers_['coronal_d1'].W].remove("trainable")
+    net.layers_['coronal_prelu_d1'].params[net.layers_['coronal_prelu_d1'].alpha].remove("trainable")
+
+    return net
+
+def k_fold_cross_validation_training_noatlas(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, all_centers, subject_names, options):
+    '''
+    Perform k-fold-cross classification of the entire database of images. This function is called once and 
+    we iterate through the images. For each image, a training feature vector X and Y is computed removing the current
+    image. So far, a quick cascade implementation:
+
+    [train data] --> [train_cnn1] --> [test on training data] --> [extract FP as new training data] --> [CNN2]
+
+    Once the CNN1 is trained, all images used for training have to be recalled again and tested, as the model does not train using the whole
+    training set, but all positive (sub-cortical classes) and the same number of negatives (background)
+
+    Inputs: 
+      - x_axial: a list of X data (axial slice) indexed for each of the database subjects. Each element contains array of [features, p1, p2]
+      - y_axial: a list of labels (axial slice) indexed for each of the database subjects. Each element contains array of [features, p1, p2]
+      - ...
+      - y_saggital: a list of labels (saggital slice) indexed for each of the database subjects. Each element contains array of [features, p1, p2]
+      - centers: a list of voxel coordinates for each of the extracted patches for each of the database subjects. 
+      - image names 
+      - options for different options in leave-one-out training. Now incorporating also the options['levels'], which controls how many cascade
+        levels are performed
+        options['k-fold'] controls the k-fold validation ratio.
+    '''
+
+        
+    k = options['k-fold']
+    for i in range(0,len(subject_names),k):
+
+        
+        # organize experiments
+        current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
+        print "\n--------------------------------------------------"
+        print "training on subject :", current_scan
+        print "--------------------------------------------------\n"
+        experiment = options['experiment']
+        if options['organize_experiments']:
+            exp_folder = os.path.join(options['folder'], current_scan, experiment)
+            if not os.path.exists(exp_folder):
+                os.mkdir(exp_folder)
+                os.mkdir(os.path.join(exp_folder,'nets'))
+                os.mkdir(os.path.join(exp_folder,'.train'))
+        else:
+            exp_folder = os.path.join(options['folder'], current_scan)
+            if not os.path.exists(os.path.join(exp_folder,'nets')):
+                os.mkdir(os.path.join(exp_folder,'nets'))
+            if not os.path.exists(os.path.join(exp_folder,'.train')):
+                os.mkdir(os.path.join(exp_folder,'train'))
+
+        # iterate through levels
+        # at the end of each iterations, reload data with the worst examples
+
+        x_axial_ = x_axial
+        x_cor_ = x_cor
+        x_sag_ = x_sag
+        y_axial_ = y_axial
+        y_cor_ = y_cor
+        y_sag_ = y_sag
+                        
+        centers = all_centers
+        
+        for level in range(options['levels']):
+
+            
+            print '--------------------------------------------------'
+            print 'LEVEL ', level +1
+            print '--------------------------------------------------\n'
+            
+            # Build the network, if selected, load previous weights
+            # If resampling positive classes, resample each "epochs_by_sample"
+            
+            if options['re-sampling']:
+                iterations = options['max_epochs'] / options['epochs_by_sample']
+                options['max_epochs'] = options['epochs_by_sample']
+
+                print "Re-sampling is enabled...."
+                print "Num iterations:", iterations, "max epochs by iteration" , options['max_epochs']
+
+            print current_scan + ' Build the model'
+            net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
+  
+            if options['load_weights'] == True:
+                try:
+                    net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+                    net.load_params_from(net_weights)
+                except:
+                    print  current_scan, 'No network weights available. Training from scratch'
+
+            if options['re-sampling']:
+                print iterations
+                for it in range(iterations):
+
+                    # load training data for the current scan
+                    
+                    x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
+
+                    
+                    #seed = np.random.randint(np.iinfo(np.int32).max)
+                    #np.random.seed(seed)
+                    #x_train_axial = np.random.permutation(x_train_axial)
+                    #np.random.seed(seed)
+                    #x_train_cor = np.random.permutation(x_train_cor)
+                    #np.random.seed(seed)
+                    #x_train_sag = np.random.permutation(x_train_sag)
+                    #np.random.seed(seed)
+                    #y_train = np.random.permutation(y_train)
+                    #np.random.seed(seed)
+                    #train_atlas = np.random.permutation(train_atlas)
+
+                    if it == 0:                
+                        print "\n--------------------------------------------------"
+                        print current_scan, '---- iteration: ', it, '----'
+                        print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+                        print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+                        print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
+                        print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
+                        print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+                        print "--------------------------------------------------\n"
+                    
+                    # fit the classifier. save weights when finished
+                    net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
+
+
+            else:
+                x_train_axial, x_train_cor, x_train_sag, train_atlas, y_train = generate_training_set(options['folder'], current_scan, i, x_axial_, x_cor_, x_sag_, y_axial_, options, centers = centers, k_fold = k)
+            
+                print "\n--------------------------------------------------"
+                print current_scan +  ': X axial: Training data = (' + ','.join([str(length) for length in x_train_axial.shape]) + ')'
+                print current_scan +  ': X cor  : Training data = (' + ','.join([str(length) for length in x_train_cor.shape]) + ')'
+                print current_scan +  ': X sag  : Training data = (' + ','.join([str(length) for length in x_train_sag.shape]) + ')'
+                print current_scan +  ': X atlas: Training data = (' + ','.join([str(length) for length in train_atlas.shape]) + ')' 
+                print current_scan +  ': Y: Training labels = (' + ','.join([str(length) for length in y_train.shape]) + ')' 
+                print "--------------------------------------------------\n"
+                # fit the model
+
+                if options['tf']:
+                    net = define_training_layers(net)
+        
+                net.fit({'in1': x_train_axial, 'in2': x_train_cor, 'in3': x_train_sag}, y_train)
+                
+            net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+            net.load_params_from(net_weights)
+
+            if options['testing']:
+                # test the scan not used for training
+                image_nii = load_nii(subject_names[i])
+                image = np.zeros_like(image_nii.get_data())
+                image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15])
+                print current_scan, ': testing on --> ', current_scan
+                
+                for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i],
+                                                                                          options['test_batch_size'],
+                                                                                          tuple(options['patch_size']),
+                                                                                          dir_name = options['folder'],
+                                                                                          current_scan = current_scan):
+
+                    y_pred = net.predict({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                    [x, y, z] = np.stack(centers, axis=1)
+                    image[x, y, z] = y_pred
+
+
+                    if options['out_probabilities']:
+                        # predict probabilities 
+                        y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag})
+                        for c in range(15):
+                            image_proba[x, y, z, c] = y_pred_proba[:,c]
+
+
+                # save segmentation masks for debugging in '.train'.
+                # for the current scan, save booth the labels and the probabilities in the "EXP_FOLDER"
+                image_nii.get_data()[:] = image
+                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_level_' + str(level) + '.nii.gz'))
+      
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(image)
+
+                # load mni binary mask to guide the segmentation 
+                atlas = load_nii(os.path.join(options['folder'], current_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = image == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
+
+                    num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
+
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+
+                image_nii.get_data()[:] = filtered_mask
+                image_nii.to_filename(os.path.join(exp_folder, current_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
+                if options['out_probabilities']:
+                    image_out = nib.Nifti1Image(image_proba, np.eye(4))
+                    image_out.to_filename(os.path.join(exp_folder,  current_scan + '_level_' + str(level) + '_proba.nii.gz'))

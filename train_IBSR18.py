@@ -46,7 +46,7 @@ options['use_t1'] = True
 options['t1'] = 'T1_n4.nii.gz'
 options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
-options['out_probabilities'] = False
+options['out_probabilities'] = True
 
 
 # - CNN training batch size
@@ -64,8 +64,11 @@ options['epochs_by_sample'] = 1
 options['train_split'] = 0.25
 options['test_batch_size'] = 50000
 options['load_weights'] = True
-options['testing'] = True 
+options['testing'] = False
 options['levels'] = 1
+options['tf'] = 0
+options['filtering_out'] = False
+options['crop'] = True 
 
 # DA options (experimental)
 options['data_augmentation'] = args.da

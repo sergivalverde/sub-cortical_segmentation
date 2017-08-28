@@ -61,11 +61,10 @@ def load_patch_vectors(name, label_name, dir_name, size, random_state=42, seeds 
         if balance_neg == True:
             n_vox_coord_pos = [get_mask_voxels(mask==15,  size=len(p)) for mask, p in zip(labels, p_vox_coord_pos)]
         else:
-            n_vox_coord_pos = [get_mask_voxels(mask==15) for mask, p in zip(labels, p_vox_coord_pos)]        
+            n_vox_coord_pos = [get_mask_voxels(mask==15) for mask, p in zip(labels, p_vox_coord_pos)]
     else:
         n_vox_coord_pos = [get_mask_voxels(np.logical_and(mask==15, seed ==1),  size=len(p)) for mask, seed, p in zip(labels, seeds, p_vox_coord_pos)]
 
-        
     axial_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(images_norm, n_vox_coord_pos)]
     axial_y_neg_patches = [np.array(get_patches(image, centers, size, mode = 'axial')) for image, centers in zip(labels, n_vox_coord_pos)]
     cor_x_neg_patches = [np.array(get_patches(image, centers, size, mode = 'coronal')) for image, centers in zip(images_norm, n_vox_coord_pos)]
@@ -93,6 +92,7 @@ def get_atlas_vectors(dir_name, current_scan, centers):
 
     subjects = [f for f in sorted(os.listdir(dir_name)) if os.path.isdir(os.path.join(dir_name, f))]
     atlas_names =  [os.path.join(dir_name, subject, 'mni_atlas', 'MNI_sub_prob_def.nii.gz') for subject in subjects]
+    #atlas_names =  [os.path.join(dir_name, subject, 'CONV_180_540_270_NB_N4', subject+'_level_0_proba.nii.gz') for subject in subjects]
     atlas_images =  [load_nii(atlas).get_data() for atlas in atlas_names]
     
     # ATLAS probabilities (centered voxel)
@@ -134,8 +134,6 @@ def load_patches(dir_name, mask_name, t1_name, size, seeds = None, balance_neg =
 
     random_state = np.random.randint(1)
 
-
-
     print 'Loading ' + t1_name + ' images'
     x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, t1_names = load_patch_vectors(t1_name,
                                                                                          mask_name,
@@ -158,9 +156,7 @@ def load_only_names(dir_name,mask_name,t1_name, use_t1, size):
         t1_names = [os.path.join(dir_name, patient, t1_name) for patient in patients]
         
     #image_names = np.stack([name for name in [t1_names] if name is not None])
-
     return t1_names
-
 
     
 def get_patches(image, centers, patch_size=(32, 32), mode = 'axial'):
@@ -225,7 +221,9 @@ def get_mask_voxels(mask, size=None):
     return indices_list
 
 
-def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir_name = None, current_scan = None, datatype=np.float32):
+
+    
+def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir_name = None, current_scan = None, crop = True, datatype=np.float32):
     """
     Load testing data in batches to reduce RAM memory. Return data in batches. If a mask is passed as input
     only the voxels of this mask are considered for testing. This can be useful to test the cascade. 
@@ -245,22 +243,48 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
        - voxel coordinate
     """
 
+    from scipy import ndimage, stats
     
     image = load_nii(image_name).get_data()
     image_norm = (image - image[np.nonzero(image)].mean()) / image[np.nonzero(image)].std()
 
-    # take into account if a mask with positive samples is passed.
-    # If not, extract all voxels 
-    if pos_samples is None:
+
+    # crop input data to reduce testing samples
+
+
+    '''
+    if crop:
+        indices = np.stack(np.nonzero(mask_atlas.get_data()), axis=1)
+        X = indices[:,0]
+        Y = indices[:,1]
+        Z = indices[:,2]
+        d_ = 5
+
+        positive_mask = np.zeros_like(mask_atlas.get_data())
+        positive_mask[np.min(X)-d_:np.max(X)+d_,
+                      np.min(Y)-d_:np.max(Y)+d_,
+                      np.min(Z)-d_:np.max(Z)+d_] = 1
+
+        lesion_centers = get_mask_voxels(positive_mask)
+    '''
+    if crop:
+        mask_atlas = nib.load(os.path.join(dir_name, current_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz'))
+        b_mask = ndimage.morphology.binary_dilation(mask_atlas.get_data(), iterations = 10)
+        lesion_centers = get_mask_voxels(b_mask.astype(np.bool))
+    elif pos_samples is None:
         lesion_centers = get_mask_voxels(image.astype(np.bool))
+
     else:
         lesion_centers = get_mask_voxels(pos_samples.astype(np.bool))
-
+        
+    print "NUM OF SAMPLES TO TEST:", len(lesion_centers)        
     # load atlas
     
     atlas_name = os.path.join(dir_name, current_scan, 'mni_atlas', 'MNI_sub_prob_def.nii.gz')
+    #atlas_name =  os.path.join(dir_name, current_scan, 'CONV_180_540_270_NB_N4', current_scan+'_level_0_proba.nii.gz')
     atlas_image =  load_nii(atlas_name).get_data()
 
+    
     for i in range(0, len(lesion_centers), batch_size):
         
         centers = lesion_centers[i:i+batch_size]
@@ -277,11 +301,45 @@ def load_patch_batch(image_name, batch_size, patch_size, pos_samples = None, dir
             if np.sum(atlas_vector[index]) == 0:
                 atlas_vector[index,14] = 1
 
-               
+    
         yield axial_patches, coronal_patches, saggital_patches, atlas_vector, centers
 
         
+def apply_da_transformation(input_batch):
+    """
+    handle class for on-the-fly data augmentation on batches. 
+    Applying 90,180 and 270 degrees rotations and flipping
+    """
+        
+    bs = input_batch.shape[0]
+    indices = np.random.choice(bs, bs / 2, replace=False)        
 
+    x_ = input_batch[indices]
+
+    if len(x_) > 0:
+        
+        # apply rotation to the input batch
+        rotate_90 = x_[:,:,::-1,:].transpose(0,1,3,2)
+        rotate_180 = rotate_90[:,:,::-1,:].transpose(0,1,3,2)
+        #rotate_270 = rotate_180[:,:,:,::-1,:].transpose(0,1,2,4,3)
+
+        # apply flipped versions of rotated patches
+        rotate_0_flipped = x_[:,:,:,::-1]
+        #rotate_90_flipped = rotate_90[:,:,:,:,::-1]
+        rotate_180_flipped = rotate_180[:,:,:,::-1]
+        #rotate_270_flipped = rotate_270[:,:,:,:,::-1]
+
+
+        augmented_x = np.stack([rotate_180,
+                                rotate_0_flipped,
+                                rotate_180_flipped],
+                               axis=1)
+
+        r_indices = np.random.randint(0,3,size=augmented_x.shape[0])
+        input_batch[indices] = np.stack([augmented_x[i,r_indices[i],:,:,:] for i in range(augmented_x.shape[0])])
+
+    return input_batch
+                
 
         
         
