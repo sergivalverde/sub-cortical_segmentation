@@ -359,6 +359,108 @@ def test_all_scans(subject_names, options):
                 image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
 
                   
+def test_all_scans_noatlas(subject_names, options):
+    """
+    Perform testing on all the scans of the database. It assumes that for each subject, a trained 
+    network already exists. Usng a cascade approach. 
+
+    Input: 
+    - subject_names: a list containing the names of each of the subjects of the database.
+    - options file for testing 
+    """
+    for i in range(len(subject_names[0])):
+
+        # organize experiments
+        current_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
+        print "--- testing on subject :", current_scan, '---------'
+
+        experiment = options['experiment']
+        if options['organize_experiments']:
+            exp_folder = os.path.join(options['folder'], current_scan, experiment)
+            if not os.path.exists(exp_folder):
+                os.mkdir(exp_folder)
+                os.mkdir(os.path.join(exp_folder,'nets'))
+                os.mkdir(os.path.join(exp_folder,'.train'))
+        else:
+            exp_folder = os.path.join(options['folder'], current_scan)
+            if not os.path.exists(os.path.join(exp_folder,'nets')):
+                os.mkdir(os.path.join(exp_folder,'nets'))
+            if not os.path.exists(os.path.join(exp_folder,'.train')):
+                os.mkdir(os.path.join(exp_folder,'train'))
+
+        if os.path.exists(os.path.join(exp_folder, current_scan + '_filt_level_' + str(1) + '.nii.gz')):
+            continue
+        # itereate between iterations
+
+        positive_samples = None
+        test_scan = os.path.split(os.path.split(subject_names[i])[0])[-1]
+        image_nii = load_nii(subject_names[i])
+        
+        for level in range(options['levels']):
+            # build the network model for the particular image 
+            # load previous weights for testing
+
+            if i == 0:
+                net = build_model(os.path.join(options['folder'], current_scan), options, level = level)
+                net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
+                net.load_params_from(net_weights)
+                
+            image = np.zeros_like(image_nii.get_data())
+            image_proba = np.zeros([image_nii.get_data().shape[0], image_nii.get_data().shape[1], image_nii.get_data().shape[2], 15]).astype('float32')
+            print current_scan, ': testing on --> ', test_scan, ' (level ', level , ')'
+
+            for batch_axial, batch_cor, batch_sag, atlas, centers in load_patch_batch(subject_names[i], options['test_batch_size'],
+                                                                                      tuple(options['patch_size']),
+                                                                                      dir_name = options['folder'],
+                                                                                      current_scan = current_scan,
+                                                                                      crop = options['crop']):
+
+                print current_scan, batch_axial.shape
+
+                # predict classes
+                y_pred = net.predict({'in1': batch_axial,
+                                      'in2': batch_cor,
+                                      'in3': batch_sag})
+                
+                [x, y, z] = np.stack(centers, axis=1)
+                image[x, y, z] = y_pred
+
+                if options['out_probabilities']:
+                    # predict probabilities 
+                    y_pred_proba = net.predict_proba({'in1': batch_axial, 'in2': batch_cor, 'in3': batch_sag, 'in4': atlas})
+                    for c in range(15):
+                        image_proba[x, y, z, c] = y_pred_proba[:,c]
+
+            # save segmentations
+            seg_out = nib.Nifti1Image(image, affine = image_nii.affine)
+            seg_out.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '.nii.gz'))
+            if options['out_probabilities']:
+                
+                seg_out_prob = nib.Nifti1Image(image_proba, affine = image_nii.affine)
+                seg_out_prob.to_filename(os.path.join(exp_folder,  test_scan + '_level_' + str(level) + '_proba.nii.gz'))
+
+            if options['filtering_out']:
+                # filter-out fp by taking only the higher area.
+                # iterate for each of the classes
+                filtered_mask = np.zeros_like(image)            
+                atlas = load_nii(os.path.join(options['folder'], test_scan, 'mni_atlas', 'MNI_mask_subcortical.nii.gz')).get_data()
+                for l in range(1,15):
+                    print "     processing label ", l
+                    th_label = image == l
+                    labels, num_labels = ndimage.label(th_label)
+                    label_list = np.unique(labels)
+                    # filter candidates by size. Only storing the biggest one
+                    
+                    num_elements_by_lesion = ndimage.labeled_comprehension(np.logical_and(th_label, atlas), labels, label_list, np.sum, float, 0)
+                    argmax = np.argmax(num_elements_by_lesion)
+                    
+                    # assign voxels to output
+                    current_voxels = np.stack(np.where(labels == argmax), axis =1)
+                    filtered_mask[current_voxels[:,0], current_voxels[:,1], current_voxels[:,2]] = l
+    
+                image_nii.get_data()[:] = filtered_mask
+                image_nii.to_filename(os.path.join(exp_folder, test_scan + '_filt_level_' + str(level) + '.nii.gz'))
+
 
 def generate_training_set(training_folder, current_scan, index, x_axial, x_coronal, x_saggital, y, options, centers = None, randomize = True, k_fold = 1):
     """

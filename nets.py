@@ -563,17 +563,18 @@ def build_model(subject_path, options, level = 0):
                 save_training_history,
                 early_stopping,
             ],
-            verbose= t_verbose,
-            max_epochs= num_epochs,
-            train_split=TrainSplit(eval_size= train_split_perc),
+                verbose= t_verbose,
+                max_epochs= num_epochs,
+                train_split=TrainSplit(eval_size= train_split_perc),
         )
 
-    if (options['experiment'] == 'CONV_180_540_270_N4') or (options['experiment'] == 'CONV_' + str(ps) + '_180_540_270_N4' ) or (options['experiment'] == 'CONV_180_540_270_NOBORDER_N4'):
+    if (options['experiment'] == 'CONV_180_540_270_N4') or (options['experiment'] == 'CONV_' + str(ps) + '_180_540_270_N4' ) or (options['experiment'] == 'CONV_180_540_270_NOBORDER_N4')  or (options['experiment'] == 'CONV_180_540_270_K3_N4') or (options['experiment'] == 'CONV_180_540_270'):
         # CONV_180_540_270_NOBORDER_N4 (no border sampling)
         fc_conv = 180
         fc_fc = 180 
         dropout_conv = 0.5
         dropout_fc = 0.5
+        
         # --------------------------------------------------
         # channel_1: axial
         # --------------------------------------------------
@@ -1035,7 +1036,7 @@ def build_model(subject_path, options, level = 0):
             train_split=TrainSplit(eval_size= train_split_perc),
         )
 
-    if (options['experiment'] == 'CONV_180_540_270_NOATLAS_N4'):
+    if (options['experiment'] == 'CONV_180_540_270_NOATLAS_N4') or (options['experiment'] == 'CONV_180_540_270_NOATLAS'):
     
         fc_conv = 180
         fc_fc = 180 

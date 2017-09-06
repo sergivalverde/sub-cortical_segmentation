@@ -16,7 +16,7 @@ args = parser.parse_args()
 os.environ['KERAS_BACKEND'] = 'theano'
 os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=gpu'+str(args.gpu)+',floatX=float32,optimizer=fast_compile'
 
-from base import load_data, load_names,  test_all_scans, k_fold_cross_validation_training
+from base import load_data, load_names,  test_all_scans, k_fold_cross_validation_training, k_fold_cross_validation_training_noatlas
 import sys
 
 # ------------------------------------------------------------------------------------
@@ -39,15 +39,14 @@ if args.re:
 print experiment 
 options['experiment'] = experiment
 options['organize_experiments'] = True
-options['k-fold'] = 3
+options['k-fold'] = 1
 
 # dataset 
 options['use_t1'] = True
 options['t1'] = 'T1_n4.nii.gz'
 options['mask'] = 'gt_15_classes.nii.gz'
 options['out_mask'] = 'CNN_' + experiment
-options['out_probabilities'] = True
-
+options['out_probabilities'] = False
 
 # - CNN training batch size
 options['patch_size'] = [args.ps, args.ps]
@@ -87,7 +86,7 @@ if __name__ == '__main__':
         # load feature data and perform leave-one-out training
         options['folder'] = '/mnt/DATA/w/CNN_CORT/images/IBSR18/paper'
         x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names = load_data(options)
-        k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)
+        k_fold_cross_validation_training_noatlas(x_axial, y_axial, x_cor, y_cor, x_sag, y_sag, centers, subject_names, options)
     else:
         # if training is disabled, test all the images of the dataset using existing weights, assuming that those exits
         options['folder'] = '/mnt/DATA/w/CNN_CORT/images/IBSR18/paper'
