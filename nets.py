@@ -628,6 +628,7 @@ def build_model(subject_path, options, level = 0):
         # FC
         layer = ConcatLayer(name = 'elem_channels', incomings = [axial_ch, coronal_ch, saggital_ch])
         layer = DropoutLayer(layer, name = 'f1_drop', p = dropout_fc)        
+
         layer = DenseLayer(layer, name='FC1', num_units =540)
         layer = prelu(layer, name = 'prelu_f1')
         layer = DropoutLayer(layer, name = 'f2_drop', p = dropout_fc)        

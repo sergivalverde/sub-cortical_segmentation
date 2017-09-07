@@ -9,7 +9,7 @@ import scipy.io as io
 from data_creation import load_patches, load_only_names, load_patch_batch, get_atlas_vectors
 from nets import build_model
 from skimage.transform import SimilarityTransform, warp, AffineTransform, rotate
-
+import time
 
 def load_data(options):
     """
@@ -114,6 +114,7 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
         y_sag_ = y_sag
                         
         centers = all_centers
+        t1 = time.time()
         
         for level in range(options['levels']):
 
@@ -197,6 +198,10 @@ def k_fold_cross_validation_training(x_axial, y_axial, x_cor, y_cor, x_sag, y_sa
             net_weights = os.path.join(exp_folder, 'nets', options['weights_name'][level])
             net.load_params_from(net_weights)
 
+            print "**************************************************"
+            print "ELAPSED TIME: ", time.time() - t1
+            print "**************************************************"
+            
             if options['testing']:
                 # test the scan not used for training
                 image_nii = load_nii(subject_names[i])
