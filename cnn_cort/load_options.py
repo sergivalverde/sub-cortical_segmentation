@@ -49,7 +49,13 @@ def load_options(user_config):
     options['out_probabilities'] = user_config.get('model', 'out_probabilities')
     options['post_process'] = user_config.get('model', 'post_process')
     options['crop'] = user_config.get('model', 'speedup_segmentation')
-    
+
+    # CUDA GPU / CPU options
+    if options['mode'].find('cuda') == -1:
+        os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
+    else:
+        os.environ['THEANO_FLAGS']='mode=FAST_RUN,device='+options['mode'] +',floatX=float32,optimizer=fast_compile'
+
     return options 
 
 

@@ -357,6 +357,12 @@ def load_patch_batch(scan_name,  options, datatype=np.float32):
     image = load_nii(scan_name).get_data()
     image_norm = (image - image[np.nonzero(image)].mean()) / image[np.nonzero(image)].std()
 
+    # load atlas, register if does not exist 
+    atlas_name = os.path.join(dir_name,  'tmp', 'MNI_sub_probabilities.nii.gz')
+    if os.path.exists(atlas_name) is False:
+        print "         --> registering priors for scan", name, 
+        t = register_masks(scan_name)
+        print "(elapsed time ", t/60.0, "min.)"
 
     if options['crop']:
         mask_atlas = nib.load(os.path.join(dir_name, 'tmp', 'MNI_subcortical_mask.nii.gz'))
@@ -368,12 +374,6 @@ def load_patch_batch(scan_name,  options, datatype=np.float32):
     if options['debug'] == 'True':
         print "    -->  num of samples to test:", len(lesion_centers)
         
-    # load atlas, register if does not exist 
-    atlas_name = os.path.join(dir_name,  'tmp', 'MNI_sub_probabilities.nii.gz')
-    if os.path.exists(atlas_name) is False:
-        print "         --> registering priors for scan", mame, 
-        t = register_masks(scan_name)
-        print "(elapsed time ", t/60.0, "min.)"
 
     atlas_image =  load_nii(atlas_name).get_data()
     batch_size = options['test_batch_size']

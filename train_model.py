@@ -25,11 +25,6 @@ user_config = ConfigParser.RawConfigParser()
 user_config.read(os.path.join(CURRENT_PATH, 'configuration.cfg'))
 options = load_options(user_config)
 
-if options['mode'].find('cuda') == -1:
-    os.environ['THEANO_FLAGS']='mode=FAST_RUN,device=cpu,floatX=float32,optimizer=fast_compile'
-else:
-    os.environ['THEANO_FLAGS']='mode=FAST_RUN,device='+options['mode'] +',floatX=float32,optimizer=fast_compile'
-
 # --------------------------------------------------
 # load data 
 # --------------------------------------------------
@@ -37,7 +32,7 @@ else:
 from cnn_cort.base import load_data, generate_training_set, load_test_names, test_scan
 from cnn_cort.nets import build_model
 
-
+'''
 # get data patches from all orthogonal views 
 x_axial, x_cor, x_sag, y, x_atlas, names = load_data(options)
 
@@ -64,7 +59,7 @@ net.fit({'in1': x_train_axial,
          'in3': x_train_sag,
          'in4': x_train_atlas}, y_train)
 
-
+'''
 # --------------------------------------------------
 # test the model (for each scan)
 # --------------------------------------------------
