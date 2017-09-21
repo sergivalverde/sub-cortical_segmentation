@@ -8,10 +8,15 @@ Kushibar, K., Valverde, S., et al. Publication on arxiv
 
 ## Overview: 
 
+This repository implements a voxelwise convolutional neural network based approach for accurate segmentation of the sub-cortical brain structures. In order to increase the sensitivity of the method on tissue boundaries and voxels with poor contrast or lack of contrast, we fuse a-priori class probabilities with convolutional features in the first fully convolutional layers of the net.
+
+![pipeline](/imgs/pipeline.png)	
 
 
+Contrary to other available works, the proposed network is trained using a restricted sample selection to force the network to learn only the most challenging voxels from structure boundaries. For more information about the method of the evaluation performed, please see the related publication. 
 
-## Install
+
+# Install:
 
 The method works on top of [Lasagne](http://lasagne.readthedocs.io/en/latest/index.html) and [Theano](http://deeplearning.net/software/theano/). If the method is run using GPU, please be sure that the Theano ```cuda*``` backend has been installed [correctly](https://github.com/Theano/Theano/wiki/Converting-to-the-new-gpu-back-end%28gpuarray%29). In the case of CPU, be sure that the fast linear algebra [libraries](http://lasagne.readthedocs.io/en/latest/user/installation.html#numpy-scipy-blas) are also installed. 
 
@@ -35,7 +40,6 @@ roi_name = gt_15_classes.nii.gz
 save_tmp = True
 ```
 
-
 Unless the model `name` and the training mode `mode`, the rest of parameters work well in most of the situations with default parameters.  
 
 ```python
@@ -55,7 +59,6 @@ speedup_segmentation = True (Reduce the segmentation only to the subcortical spa
 post_process = True (Postprocess the segmentation excluding sporious regions)
 debug = True (Show messsages that can be useful for degugging the model)
 ```
-
 
 ## Training: 
 
@@ -78,7 +81,6 @@ For training,  manual sub-cortical labels have to be provided along with T1-w im
 				manual_annotation (roi)
 
 ```
-
 ### Example: 
 
 Load the configuration file from the `configuration.cfg` file:
@@ -118,7 +120,7 @@ Once data patches are extracted, the network model can be compiled. The best net
 ```python
 
 from cnn_cort.nets import build_model
-weights_path = os.path.join(CURRENT_PATH, 'nets')
+weights_path = os.path.join(os.getcwd(), 'nets')
 net = build_model(weights_path, options)
 
 # train the net
@@ -129,7 +131,7 @@ net.fit({'in1': x_train_axial,
 
 ```
 
-## Testing 
+## Testing:
 
 Once a trained model exist, this can be used to infer sub-cortical classes on other images of the same image domain. The next example shows a simple script for batch-processing. We assume here that testing images follow also the same folder structure seen for training: 
 
@@ -158,26 +160,28 @@ from cnn_cort.base import load_test_names, test_scan
 t1_test_paths, folder_names  = load_test_names(options)
 ```
 
-Then, the trained network model set in the configuration as (`name`) is loaded with the best trained weights. We assume that the `load_weights` option is set to `True` in the `configuration.cfg` file.
+Then, the trained network model set in the configuration as (`name`) is loaded with the best trained weights. We assume that the `load_weights` option is set to `True` in the `configuration.cfg` file:
 
-
-```
+```python
 from cnn_cort.nets import build_model
 
-weights_path = os.path.join(CURRENT_PATH, 'nets')
+weights_path = os.path.join(os.getcwd(), 'nets')
 net = build_model(weights_path, options)
 ```
 
 Finally, for each image to test, we call the `test_scan` function that will save the final segmentation on the same folder than the input image: 
 
 
-```
+```python
 # iterate through all test scans
 for t1, current_scan in zip(t1_test_paths, folder_names):
     t = test_scan(net, t1, options)
     print "    -->  tested subject :", current_scan, "(elapsed time:", t, "min.)"
 ```
 
+The next figure depicts an output example, where the first image shows the output of the proposed CNN method and the second figure the manual annotation of subcortical structures also with the selected boundary voxels used as negatives (red): 
+
+![pipeline](/imgs/example.png)	
 
 # Citing this work:
 
