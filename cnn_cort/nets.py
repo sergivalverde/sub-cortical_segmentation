@@ -246,7 +246,10 @@ def build_model(weights_path, options):
     )
 
     if options['load_weights'] == 'True':
-        print "    --> loading weights from ", net_weights
-        net.load_params_from(net_weights)
-
+        try:
+            print "    --> loading weights from ", net_weights
+            net.load_params_from(net_weights)
+        except:
+            pass
+        
     return net
