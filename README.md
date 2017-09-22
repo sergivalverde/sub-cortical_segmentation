@@ -183,6 +183,12 @@ The next figure depicts an output example, where the first image shows the outpu
 
 ![pipeline](/imgs/example.png)	
 
+
+# Limitations:
+
++ The current method would only work on GNU/Linux 64bit systems. We deal with image registration between spatial atlases and T1-w inside the training routines. So far, image registration is done using included binaries for [NiftiReg](http://niftyreg.sourceforge.net/) which have been compiled for GNU/Linux 64 bits. _We are working to move the method to Docker containers._
+
+
 # Citing this work:
 
 Please cite this work as:
