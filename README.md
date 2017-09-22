@@ -198,3 +198,6 @@ put a publication
 ```
 
  
+# License:
+
+License for this software software: BSD 3-Clause License. A copy of this license is present in the root directory.
