@@ -3,8 +3,9 @@
 Subcortical brain tissue segmentation of MRI images using a combination of convolutional and a-priori spatial feautures. An electronic prepint of the method is available here:
 
 ```
-Kushibar, K., Valverde, S., et al. Publication on arxiv
+Kushibar, K., Valverde, S., et al.
 ```
+[https://arxiv.org/abs/1709.09075](https://arxiv.org/abs/1709.09075)
 
 ## Overview: 
 
