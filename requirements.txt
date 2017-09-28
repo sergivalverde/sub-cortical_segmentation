@@ -18,7 +18,6 @@ nolearn-utils==0.2.2
 numpy==1.12.1
 olefile==0.44
 Pillow==4.1.1
-pkg-resources==0.0.0
 pygpu==0.6.5
 pyparsing==2.2.0
 python-dateutil==2.6.0
